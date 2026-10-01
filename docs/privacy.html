@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy Policy — Analog Weekly Board</title><link rel="stylesheet" href="site.css"></head><body><main>
+<h1>Privacy Policy</h1>
+<p class="muted">Analog Weekly Board · Effective October 1, 2026</p>
+<p>Analog Weekly Board (“the app”) is a browser app and browser extension for keeping a weekly corkboard of notes, photos and links. This policy explains what data the app handles. In short: your boards stay on your device and, only if you choose to sign in, in your own Google Drive. We do not run a database of user data, and we do not sell, share or analyze it.</p>
+
+<h2>Data stored on your device</h2>
+<p>Your boards, weekly archives, pasted photos and settings are stored in your browser’s local storage (IndexedDB). This data never leaves your device unless you sign in to sync.</p>
+
+<h2>If you sign in with Google</h2>
+<p>Signing in is optional. When you do, the app asks for these permissions:</p>
+<ul>
+<li><strong>Google Drive app data folder</strong> (<code>drive.appdata</code>): lets the app store its own sync files (your boards, archives and photos) in a hidden folder that only this app can access. The app cannot see, read or change any of your other Google Drive files.</li>
+<li><strong>Basic profile</strong> (<code>openid</code>, <code>email</code>, <code>profile</code>): used only to show your name, email and photo on the Dashboard so you can see which account is connected.</li>
+</ul>
+<p>Synced data travels directly between your browser and Google Drive. We cannot access it.</p>
+
+<h2>Sign-in service</h2>
+<p>To keep you signed in without asking repeatedly, the extension uses a small stateless service (hosted on Cloudflare Workers) that exchanges Google’s one-time authorization code for tokens and renews access tokens. It forwards these to Google and returns the result to your browser. It does not store tokens, profile information or any of your content. Your refresh token is kept only in your own browser. Cloudflare may keep standard technical request logs (such as IP address and timestamps) as part of operating the service.</p>
+
+<h2>Third-party services</h2>
+<ul>
+<li><strong>Google</strong> (sign-in and Drive) — governed by <a href="https://policies.google.com/privacy">Google’s Privacy Policy</a>.</li>
+<li><strong>Google Fonts</strong> — the app loads a typeface from fonts.googleapis.com, so Google receives your IP address when the font is requested.</li>
+<li><strong>Cloudflare</strong> — hosts the sign-in service described above.</li>
+</ul>
+<p>The app has no advertising, no analytics and no trackers. Websites you add as clippings are only linked to; the app does not fetch or store their content.</p>
+
+<h2>Google API Services User Data Policy</h2>
+<p>The app’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Data obtained from Google is used only to provide the sync feature you requested; it is not used for advertising, is not sold, and is not transferred to anyone else.</p>
+
+<h2>Your choices</h2>
+<ul>
+<li>Sign out from the Dashboard at any time; local data stays on your device.</li>
+<li>Revoke access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+<li>Delete synced data: in Google Drive, open Settings → Manage apps → Analog Weekly Board → <em>Delete hidden app data</em>.</li>
+<li>Delete local data by clearing the site’s (or extension’s) data in your browser.</li>
+</ul>
+
+<h2>Changes and contact</h2>
+<p>If this policy changes, the updated version will be posted here with a new effective date. Questions: open an issue at <a href="https://github.com/ziru-wei/analog-weekly-board/issues">github.com/ziru-wei/analog-weekly-board/issues</a>.</p>
+<nav><a href="./">Home</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Service</a><a href="https://github.com/ziru-wei/analog-weekly-board">Source</a></nav>
+</main></body></html>
