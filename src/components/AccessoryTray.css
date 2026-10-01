@@ -1,0 +1,11 @@
+.accessory-tray { position: absolute; right: -8px; top: calc(100% - 12px); width: 310px; height: 44px; z-index: 4; }
+.accessory-metal { position: absolute; left: 0; top: 0; width: 310px; height: 44px; pointer-events: none; filter: drop-shadow(0 4px 3px #0006); transform: skewX(14deg); }
+.blue-tape-roll { position: absolute; left: 104px; top: -53px; width: 160px; height: 91px; padding: 0; transform-origin: 50% 90%; transition: transform 160ms ease; }
+.blue-tape-roll svg { display: block; width: 100%; height: 100%; }
+.blue-tape-roll:hover { transform: translateY(-1px) rotate(-2deg); }
+.blue-tape-roll:active { transform: translateY(2px) rotate(3deg) scaleY(.97); }
+
+.blue-tape-roll.is-empty { left: -28px; top: -72px; width: 366px; height: 148px; outline: none; }
+
+.tape-seat { position: absolute; left: 118px; top: 24px; width: 132px; height: 10px; pointer-events: none; background: radial-gradient(ellipse at 50% 0%, #2478b477, #2478b429 58%, transparent 76%); filter: blur(.7px); }
+.tape-seat::before { content: ''; position: absolute; left: 5px; right: 5px; top: -1px; height: 3px; border-radius: 50%; background: #102532a6; filter: blur(.6px); }

@@ -1,0 +1,10 @@
+.lightbox { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.lightbox { background: #0c0c0b00; backdrop-filter: blur(0px); transition: background 240ms ease, backdrop-filter 240ms ease; }
+.lightbox.is-open { background: #0c0c0b99; backdrop-filter: blur(9px) brightness(.7); }
+.lb-photo { position: absolute; transform-origin: center; transition: transform 240ms cubic-bezier(.2, .8, .2, 1); cursor: default; box-shadow: 0 2px 4px #0006, 0 18px 50px #000a; }
+.lb-photo .photo-reflection { pointer-events: none; }
+.overlay-hint { position: absolute; left: 0; right: 0; bottom: 22px; margin: 0; text-align: center; font-size: 10px; letter-spacing: .3px; color: #d4cbbc66; pointer-events: none; }
+.board-hint, .photo-hint { position: fixed; z-index: 19; margin: 0; font-size: 10px; letter-spacing: .3px; color: #d4cbbc66; pointer-events: none; white-space: nowrap; }
+.board-hint { right: 25px; bottom: 12px; }
+.photo-hint { left: 50%; transform: translateX(-50%); }
+.photo-hint b, .board-hint b { font-weight: 500; color: #d4cbbc99; }

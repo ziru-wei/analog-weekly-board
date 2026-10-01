@@ -1,0 +1,227 @@
+.tape-material { position: absolute; inset: 0; isolation: isolate; pointer-events: none; }
+/* One shape definition used by the real sheet and its close-contact shadow.
+   Top/bottom only wander about 1-2px at this size; left edge tears more visibly. */
+.tape-material .tape,
+.tape-material .contact-shadow{
+  clip-path:polygon(
+    1.85% .55%, 6% .78%, 12% .33%, 18% .62%, 25% .26%, 31% .58%, 38% .38%,
+    44% .73%, 51% .34%, 58% .58%, 65% .29%, 72% .63%, 79% .40%, 86% .69%,
+    93% .35%, 99.65% .58%,
+    99.82% 10%, 99.58% 19%, 99.78% 29%, 99.56% 39%, 99.80% 50%, 99.61% 61%,
+    99.84% 72%, 99.60% 82%, 99.76% 91%, 99.46% 99.25%,
+    94% 99.05%, 88% 99.52%, 82% 99.18%, 76% 99.62%, 70% 99.27%, 64% 99.68%,
+    58% 99.24%, 52% 99.60%, 46% 99.20%, 40% 99.56%, 34% 99.12%, 28% 99.49%,
+    22% 99.08%, 16% 99.45%, 10% 99.04%, 4% 99.37%, 1.25% 98.82%,
+    1.278% 97.90%, .858% 95.45%, .731% 93.01%, .892% 90.56%, .888% 88.11%,
+    .810% 85.66%, .675% 83.22%, .604% 80.77%, .562% 78.32%, .655% 75.87%,
+    .799% 73.43%, .976% 70.98%, 1.067% 68.53%, 1.225% 66.08%, 1.284% 63.64%,
+    1.508% 61.19%, 1.315% 58.74%, 1.123% 56.29%, 1.019% 53.85%, .995% 51.40%,
+    .729% 48.95%, .776% 46.50%, .981% 44.06%, 1.072% 41.61%, 1.106% 39.16%,
+    1.348% 36.71%, 1.380% 34.27%, 1.411% 31.82%, 1.613% 29.37%, 1.678% 26.92%,
+    1.787% 24.48%, 1.760% 22.03%, 1.821% 19.58%, 2.001% 17.13%, 2.051% 14.69%,
+    2.121% 12.24%, 2.015% 9.79%, 2.225% 7.34%, 2.268% 4.90%, 2.287% 2.45%,
+    2.20% .55%
+  );
+}
+
+/* Very small shadow: the sheet is touching the paper, not floating. */
+.tape-material .contact-shadow{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  background:rgba(49,43,37,.28);
+  transform:translate(.3px,2px);
+  filter:blur(1.55px);
+  opacity:.68;
+}
+
+.tape-material .tape{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  overflow:hidden;
+  background:#3f83b7;
+}
+
+.tape-material .surface{
+  position:absolute;
+  inset:-1px;
+  background-image:
+    linear-gradient(92deg,rgba(255,255,255,.035),transparent 30%,rgba(18,57,85,.025) 73%,transparent),
+    var(--tape-texture, url('/blue-tape-paper.png'));
+  background-size:100% 100%, 224px 64px;
+  background-repeat:no-repeat, repeat;
+}
+
+/* Keep the physical texture, but avoid a flat photographic rectangle. */
+.tape-material .surface::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(75% 150% at 22% 8%,rgba(255,255,255,.05),transparent 60%),
+    radial-gradient(60% 150% at 77% 92%,rgba(19,52,75,.045),transparent 67%);
+  mix-blend-mode:soft-light;
+}
+
+/* CSS-only torn cellulose. The macro profile matches the more natural v4 tear,
+   while this layer only adds a very thin exposed-paper cue. */
+.tape-material .left-fiber{
+  position:absolute;
+  z-index:5;
+  left:-2px;
+  top:0;
+  width:27px;
+  height:100%;
+  pointer-events:none;
+  opacity:.44;
+  background:
+    linear-gradient(90deg,transparent 0 34%,rgba(224,237,243,.12) 48%,rgba(225,239,246,.46) 66%,transparent 89%),
+    linear-gradient(90deg,rgba(255,255,255,.11),transparent 58%);
+  clip-path:polygon(
+    90% .55%, 93% 2.45%, 92% 4.90%, 89% 7.34%, 82% 9.79%, 86% 12.24%, 83% 14.69%,
+    80% 17.13%, 73% 19.58%, 71% 22.03%, 72% 24.48%, 68% 26.92%, 66% 29.37%, 58% 31.82%,
+    57% 34.27%, 55% 36.71%, 46% 39.16%, 45% 41.61%, 41% 44.06%, 33% 46.50%, 31% 48.95%,
+    42% 51.40%, 43% 53.85%, 47% 56.29%, 55% 58.74%, 63% 61.19%, 55% 63.64%, 53% 66.08%,
+    46% 68.53%, 42% 70.98%, 35% 73.43%, 29% 75.87%, 25% 78.32%, 27% 80.77%, 30% 83.22%,
+    35% 85.66%, 38% 88.11%, 38% 90.56%, 31% 93.01%, 36% 95.45%, 53% 97.90%, 60% 100%,
+    35% 100%, 27% 97.7%, 18% 95.2%, 20% 92.8%, 17% 90.4%, 19% 87.8%, 13% 85.5%,
+    11% 83.0%, 14% 80.5%, 10% 78.0%, 15% 75.5%, 19% 73.1%, 17% 70.7%, 22% 68.2%,
+    25% 65.8%, 28% 63.4%, 23% 60.9%, 21% 58.5%, 16% 56.0%, 18% 53.6%, 14% 51.1%,
+    12% 48.7%, 15% 46.2%, 17% 43.8%, 20% 41.3%, 24% 38.9%, 26% 36.4%, 30% 34.0%,
+    31% 31.5%, 35% 29.1%, 39% 26.6%, 43% 24.2%, 45% 21.7%, 49% 19.3%, 52% 16.8%,
+    57% 14.4%, 59% 11.9%, 63% 9.5%, 65% 7.1%, 69% 4.6%, 72% 2.2%, 72% 0
+  );
+  filter:blur(.16px);
+}
+
+/* A handful of irregular loose fibers; deliberately non-repeating. */
+.tape-material .left-hairs{
+  position:absolute;
+  z-index:6;
+  left:-5px;
+  top:0;
+  width:18px;
+  height:100%;
+  pointer-events:none;
+  opacity:.42;
+  background:
+    linear-gradient(90deg,rgba(219,235,243,.70),transparent) 5px 10.5% / 7px .7px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.60),transparent) 3px 18.7% / 5px .6px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.68),transparent) 2px 31.2% / 8px .65px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.58),transparent) 4px 47.8% / 6px .55px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.72),transparent) 1px 58.9% / 9px .7px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.56),transparent) 4px 72.5% / 5px .55px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.68),transparent) 2px 84.4% / 8px .65px no-repeat,
+    linear-gradient(90deg,rgba(219,235,243,.56),transparent) 5px 93.3% / 5px .55px no-repeat;
+  filter:blur(.12px);
+}
+
+/* Local edge-lift shadows: localized and only 1-3px deep. */
+.tape-material .edge-shadow{
+  position:absolute;
+  z-index:1;
+  pointer-events:none;
+  opacity:.9;
+  filter:blur(.7px);
+}
+
+.tape-material .edge-shadow.top-a{
+  top:-1px;
+  left:17%;
+  width:27%;
+  height:7px;
+  background:radial-gradient(ellipse at 52% 100%,rgba(45,39,34,.23) 0,rgba(45,39,34,.13) 31%,rgba(45,39,34,0) 72%);
+  transform:translateY(1.6px) rotate(.08deg);
+  mask-image:linear-gradient(to right,transparent,#000 18%,#000 82%,transparent);
+}
+.tape-material .edge-shadow.top-b{
+  top:-1px;
+  left:67%;
+  width:18%;
+  height:6px;
+  background:radial-gradient(ellipse at 50% 100%,rgba(45,39,34,.20),rgba(45,39,34,.10) 36%,transparent 73%);
+  transform:translateY(1.3px) rotate(-.08deg);
+  mask-image:linear-gradient(to right,transparent,#000 20%,#000 80%,transparent);
+}
+.tape-material .edge-shadow.bottom-a{
+  bottom:-1px;
+  left:48%;
+  width:31%;
+  height:7px;
+  background:radial-gradient(ellipse at 50% 0%,rgba(45,39,34,.24),rgba(45,39,34,.12) 34%,transparent 74%);
+  transform:translateY(-1.2px) rotate(-.06deg);
+  mask-image:linear-gradient(to right,transparent,#000 18%,#000 82%,transparent);
+}
+.tape-material .edge-shadow.bottom-b{
+  bottom:-1px;
+  left:8%;
+  width:16%;
+  height:5px;
+  background:radial-gradient(ellipse at 50% 0%,rgba(45,39,34,.18),rgba(45,39,34,.08) 37%,transparent 75%);
+  transform:translateY(-.9px) rotate(.05deg);
+  mask-image:linear-gradient(to right,transparent,#000 20%,#000 80%,transparent);
+}
+
+/* Highlight on the curled lip itself. These are inside the sheet, so it still reads as adhered. */
+.tape-material .edge-lip{
+  position:absolute;
+  z-index:5;
+  pointer-events:none;
+  filter:blur(.18px);
+}
+.tape-material .edge-lip.top-a{
+  left:18%; top:1px; width:25%; height:3px;
+  background:linear-gradient(to bottom,rgba(224,242,252,.34),rgba(224,242,252,.10),transparent);
+  transform:rotate(.08deg);
+  mask-image:linear-gradient(to right,transparent,#000 16%,#000 84%,transparent);
+}
+.tape-material .edge-lip.top-b{
+  left:68%; top:1px; width:16%; height:2.5px;
+  background:linear-gradient(to bottom,rgba(224,242,252,.27),rgba(224,242,252,.08),transparent);
+  transform:rotate(-.07deg);
+  mask-image:linear-gradient(to right,transparent,#000 18%,#000 82%,transparent);
+}
+.tape-material .edge-lip.bottom-a{
+  left:49%; bottom:1px; width:29%; height:3px;
+  background:linear-gradient(to top,rgba(213,232,244,.25),rgba(213,232,244,.07),transparent);
+  transform:rotate(-.05deg);
+  mask-image:linear-gradient(to right,transparent,#000 16%,#000 84%,transparent);
+}
+
+/* Extremely fine edge-darkening where adhesive is actually touching the substrate. */
+.tape-material .contact-line{
+  position:absolute;
+  z-index:3;
+  pointer-events:none;
+  height:1px;
+  opacity:.18;
+  filter:blur(.2px);
+}
+.tape-material .contact-line.bottom{
+  left:27%; right:10%; bottom:1px;
+  background:linear-gradient(to right,transparent,rgba(20,52,72,.55) 12%,rgba(20,52,72,.38) 72%,transparent);
+}
+.tape-material .contact-line.top{
+  left:5%; width:11%; top:1px;
+  background:linear-gradient(to right,transparent,rgba(27,62,83,.45),transparent);
+}
+
+
+.board-item.tape { background: transparent; box-shadow: none; }
+.board-item.tape::before { display: none; }
+.tape-preview { position: absolute; z-index: 5; pointer-events: none; }
+.tape-cursor { position: fixed; z-index: 50; pointer-events: none; width: 160px; height: 91px; transform-origin: 50% 50%; filter: drop-shadow(5px 12px 7px #0005); }
+.tape-equipped, .tape-equipped .board-item { cursor: crosshair; }
+
+.tape-material .left-fiber { left: -.2%; width: 3%; }
+.tape-material .left-hairs { width: 2%; left: -.5%; }
+.tape-cursor svg { display: block; width: 100%; height: 100%; }
+
+.tape-cursor svg { animation: lift-tape 170ms ease-out; }
+@keyframes lift-tape { from { transform: translateY(12px) scale(.88); } to { transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tape-cursor svg { animation: none; } }
+
+.tape-length-handle { position: absolute; top: 50%; width: 12px; height: 28px; padding: 0; transform: translateY(-50%); background: #eee6d4; border: 1px solid #766b58; cursor: ew-resize; z-index: 7; box-shadow: 0 1px 2px #21170b26; }
+.tape-length-handle.left { left: -8px; }
+.tape-length-handle.right { right: -8px; }
