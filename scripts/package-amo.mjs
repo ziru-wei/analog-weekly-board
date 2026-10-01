@@ -1,0 +1,50 @@
+// Prepares everything for a Mozilla Add-ons (AMO) submission in release/amo/:
+//   - the extension zip to upload,
+//   - a source-code zip (AMO requires it because the build is bundled/minified),
+//   - REVIEWER_NOTES.md to paste into "Notes to Reviewer".
+//   npm run package:amo               (requires VITE_AUTH_WORKER_URL; or pass --allow-no-worker)
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { loadEnv } from 'vite';
+
+const env = loadEnv('production', process.cwd(), 'VITE_');
+if (env.VITE_AUTH_WORKER_URL && !/^https:\/\/[^\s<>]+$/.test(env.VITE_AUTH_WORKER_URL)) { console.error(`VITE_AUTH_WORKER_URL in .env.local is not a real URL ("${env.VITE_AUTH_WORKER_URL}"). Use the https://….workers.dev address printed by \`wrangler deploy\`.`); process.exit(1); }
+if (!env.VITE_GOOGLE_CLIENT_ID) { console.error('Missing VITE_GOOGLE_CLIENT_ID in .env.local.'); process.exit(1); }
+if (!env.VITE_AUTH_WORKER_URL && !process.argv.includes('--allow-no-worker')) { console.error('Missing VITE_AUTH_WORKER_URL in .env.local (see worker/README.md), or pass --allow-no-worker.'); process.exit(1); }
+const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+const out = 'release/amo';
+rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
+
+execFileSync('node', ['scripts/build-extension.mjs', 'firefox'], { stdio: 'inherit' });
+const root = process.cwd(), extZip = `${root}/${out}/analog-weekly-board-firefox-${version}.zip`, srcZip = `${root}/${out}/analog-weekly-board-source-${version}.zip`;
+execFileSync('zip', ['-r', '-q', extZip, '.', '-x', '.DS_Store', '*/.DS_Store'], { cwd: 'dist-ext/firefox' });
+execFileSync('zip', ['-r', '-q', srcZip, '.', '-x', 'node_modules/*', 'dist/*', 'dist-ext/*', 'release/*', '.git/*', '.env', '.env.local', '*.pem', '*.DS_Store', '*.tsbuildinfo', 'worker/.wrangler/*'], { cwd: root });
+
+writeFileSync(`${out}/REVIEWER_NOTES.md`, `# Notes to reviewer — Analog Weekly Board ${version}
+
+**What it is:** a weekly corkboard (notes, photos, links) that opens in its own tab. Data lives in IndexedDB. Sign-in with Google is optional and only used to sync boards through the user's hidden Google Drive app-data folder.
+
+## Build (reproduces the submitted package exactly)
+Requirements: Node.js 20+ and npm 10+.
+\`\`\`
+unzip analog-weekly-board-source-${version}.zip -d source && cd source
+printf 'VITE_GOOGLE_CLIENT_ID=${env.VITE_GOOGLE_CLIENT_ID}\\nVITE_AUTH_WORKER_URL=${env.VITE_AUTH_WORKER_URL ?? ''}\\n' > .env.local
+npm ci
+npm run build:firefox
+\`\`\`
+Output: \`dist-ext/firefox/\` (this is what was zipped and uploaded). Both env values are public identifiers (an OAuth client ID and the URL of the auth worker); no secret is in the package.
+
+## About the lint warnings
+- \`DANGEROUS_EVAL\` / \`UNSAFE_VAR_ASSIGNMENT\` (innerHTML, dynamic import) come from bundled third-party libraries: three.js, threepipe and @threepipe/webgi-plugins (WebGL rendering of the colour palette tray). The app's own code does not use eval, and does not assign dynamic strings to innerHTML. No remote scripts are fetched or executed.
+
+## Network and permissions
+- \`identity\`: used with \`identity.launchWebAuthFlow\` for Google OAuth (authorization code + PKCE).
+- \`unlimitedStorage\`: IndexedDB holds boards and photos pasted by the user.
+- Host permissions: \`https://www.googleapis.com/*\` (Drive REST API), \`https://oauth2.googleapis.com/*\` (token revocation).
+- Other requests: \`accounts.google.com\` (sign-in page), the auth worker${env.VITE_AUTH_WORKER_URL ? ` (${env.VITE_AUTH_WORKER_URL})` : ''} (exchanges the one-time code / refreshes access tokens; stateless, stores nothing), and Google Fonts (a stylesheet + font file for one typeface).
+- Data collection: nothing is collected unless the user signs in; then authentication tokens and basic profile (name, email, photo) are used for sync only. Privacy policy: https://ziru-wei.github.io/analog-weekly-board/privacy.html
+
+## Testing
+Everything except sync works without an account. To test sync you need a Google account; open the Dashboard (double-click the dark area outside the board) and use "Sign in with Google".
+`);
+console.log(`✓ ${extZip}\n✓ ${srcZip}\n✓ ${root}/${out}/REVIEWER_NOTES.md`);

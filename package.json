@@ -1,7 +1,7 @@
 {
   "name": "analog-weekly-board",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -11,7 +11,8 @@
     "build:ext": "node scripts/build-extension.mjs",
     "build:chrome": "node scripts/build-extension.mjs chrome",
     "build:firefox": "node scripts/build-extension.mjs firefox",
-    "package:ext": "node scripts/package-extension.mjs"
+    "package:ext": "node scripts/package-extension.mjs",
+    "package:amo": "node scripts/package-amo.mjs"
   },
   "dependencies": {
     "@threepipe/webgi-plugins": "^0.6.4",

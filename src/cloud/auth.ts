@@ -104,6 +104,7 @@ async function refreshAccess(): Promise<string> {
 export async function requestToken(interactive: boolean): Promise<string> {
   if (hasRefreshFlow()) return interactive ? signInWithCode() : refreshAccess();
   if (isExtension()) return requestTokenInExtension(interactive);
+  if (__EXTENSION_BUILD__) throw new Error('Google sign-in is unavailable here.');
   await loadScript();
   return new Promise<string>((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({

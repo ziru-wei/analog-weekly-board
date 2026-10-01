@@ -1,4 +1,4 @@
-# Little things
+# Analog Weekly Board
 
 A finite, tactile corkboard built with React, TypeScript, and Vite.
 

@@ -18,7 +18,19 @@ const base = {
 const manifests = {
   // `key` pins Chrome's extension ID, so the Google redirect URI https://<id>.chromiumapp.org/ is the same for every install.
   chrome: { ...base, key: readFileSync('extension/chrome-key.pub.b64', 'utf8').trim(), background: { service_worker: 'background.js' } },
-  firefox: { ...base, background: { scripts: ['background.js'] }, browser_specific_settings: { gecko: { id: 'weekly-board@analogwitch', strict_min_version: '121.0' } } },
+  firefox: {
+    ...base,
+    background: { scripts: ['background.js'] },
+    browser_specific_settings: {
+      gecko: {
+        id: 'weekly-board@analogwitch',
+        strict_min_version: '140.0',
+        // Sync is opt-in: nothing is collected unless the user signs in with Google.
+        data_collection_permissions: { required: ['none'], optional: ['authenticationInfo', 'personallyIdentifyingInfo'] },
+      },
+      gecko_android: { strict_min_version: '142.0' },
+    },
+  },
 };
 for (const target of targets) {
   execFileSync('npx', ['vite', 'build'], { stdio: 'inherit', env: { ...process.env, EXT_TARGET: target } });

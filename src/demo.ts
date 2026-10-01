@@ -12,7 +12,7 @@ export function createDemo(): BoardDocument {
   add('reference', { type: 'website', url: 'https://www.are.na/', title: 'A place for things worth keeping.', domain: 'are.na', description: 'Collect ideas. Follow a thread.' }, 848, 645, 354, 136, 5);
   const colors = [PIN_COLORS[0], PIN_COLORS[5], PIN_COLORS[2], PIN_COLORS[1], PIN_COLORS[0]];
   const pins = Object.fromEntries(Object.values(items).map((item, i) => [`pin-${item.id}`, { id: `pin-${item.id}`, itemId: item.id, xRatio: .48, yRatio: .055, color: colors[i] }]));
-  return { board: { id: 'little-things', title: 'Little things', width: 1600, height: 1000 }, items, pins, connections: {
+  return { board: { id: 'my-board', title: 'My Board', width: 1600, height: 1000 }, items, pins, connections: {
     first: { id: 'first', fromPinId: 'pin-week', toPinId: 'pin-outside' },
     second: { id: 'second', fromPinId: 'pin-week', toPinId: 'pin-make' },
     third: { id: 'third', fromPinId: 'pin-outside', toPinId: 'pin-reference' },
