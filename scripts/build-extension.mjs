@@ -16,7 +16,8 @@ const base = {
   content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
 };
 const manifests = {
-  chrome: { ...base, background: { service_worker: 'background.js' } },
+  // `key` pins Chrome's extension ID, so the Google redirect URI https://<id>.chromiumapp.org/ is the same for every install.
+  chrome: { ...base, key: readFileSync('extension/chrome-key.pub.b64', 'utf8').trim(), background: { service_worker: 'background.js' } },
   firefox: { ...base, background: { scripts: ['background.js'] }, browser_specific_settings: { gecko: { id: 'weekly-board@analogwitch', strict_min_version: '121.0' } } },
 };
 for (const target of targets) {

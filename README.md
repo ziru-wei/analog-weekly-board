@@ -48,3 +48,7 @@ The bundled demo photograph comes from [Unsplash](https://images.unsplash.com/ph
 Tape stays fully within the cork when drawn, moved, or lengthened. Papers stop above the lower-right shelf; the held roll has a generous return target around that shelf. Empty notes have no placeholder text.
 
 With nothing selected or being edited, typing produces a translucent tracing-paper label at the top center. Enter commits it to the board; Escape cancels the draft. The floating composer and committed tracing-paper layer use backdrop blur over all content below them. Black and tracing-paper labels stay entirely inside the board. Unpinned regular notes may overhang by at most one third of their width; the clip image’s measured bounds block paper movement.
+
+## License
+
+Source code: [GPL-3.0-or-later](LICENSE) — required because the app uses `@threepipe/webgi-plugins` (GPL-3.0 with additional terms). Bundled fonts and images keep their own licenses: LXGW WenKai and Sarasa Mono are under the SIL Open Font License; check the license of any other font or image before reusing it.

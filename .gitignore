@@ -10,3 +10,5 @@ dist-ext/
 !.env.example
 worker/.wrangler/
 worker/.dev.vars
+release/
+*.pem

@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "build:ext": "node scripts/build-extension.mjs",
     "build:chrome": "node scripts/build-extension.mjs chrome",
-    "build:firefox": "node scripts/build-extension.mjs firefox"
+    "build:firefox": "node scripts/build-extension.mjs firefox",
+    "package:ext": "node scripts/package-extension.mjs"
   },
   "dependencies": {
     "@threepipe/webgi-plugins": "^0.6.4",
@@ -25,5 +26,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.7.3",
     "vite": "^6.1.0"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }
