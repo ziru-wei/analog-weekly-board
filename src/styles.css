@@ -1,6 +1,6 @@
-@font-face { font-family: 'Tracing Mono'; src: url('/fonts/SarasaMonoHC-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Tracing Mono'; src: url('/fonts/SarasaMonoHC-Regular.subset.woff2') format('woff2'); font-weight: 400; font-display: swap; }
 @font-face { font-family: 'Board English'; src: url('/fonts/FluxischElse-Regular.otf') format('opentype'); font-display: swap; }
-@font-face { font-family: 'Board Chinese'; src: url('/fonts/LXGWWenKai-Medium.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Board Chinese'; src: url('/fonts/LXGWWenKai-Medium.subset.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
 :root { font-family: 'Board English', 'Board Chinese', sans-serif; color: #d1ccc2; background: #191a18; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
