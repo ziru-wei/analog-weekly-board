@@ -13,3 +13,4 @@ worker/.dev.vars
 release/
 *.pem
 web-ext-artifacts/
+developer_reminder.md

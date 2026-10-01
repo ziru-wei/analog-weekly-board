@@ -20,9 +20,9 @@ const driveBackend: Backend = { list: drive.listFiles, read: drive.readJson, wri
 export type CloudStatus = 'unconfigured' | 'signed-out' | 'connecting' | 'idle' | 'syncing' | 'needs-reconnect' | 'error';
 export interface CloudState { status: CloudStatus; user?: GoogleUser; lastSyncedAt?: number; error?: string }
 /** What the sync engine needs from the app: the live state, a way to apply a merged result, and to mark a pushed version. */
-export interface Host { getState(): WeekState; apply(next: WeekState): void; markSynced(rev: string): void }
+export interface Host { getState(): WeekState; apply(next: WeekState): void; markSynced(uploaded: CurrentWeek): void }
 
-const SESSION_KEY = 'cloud-session', PENDING_DELETES = 'cloud-pending-deletes';
+const SESSION_KEY = 'cloud-session', PENDING_DELETES = 'cloud-pending-deletes', PENDING_UPLOAD = 'cloud-pending-upload';
 const CURRENT_FILE = 'current.json', archiveFile = (a: { weekStart: string }) => `archive-${a.weekStart}.json`, conflictFile = (c: { id: string }) => `${c.id}.json`, assetFile = (hash: string) => `asset-${hash}`;
 const GC_GRACE_MS = 24 * 3600_000, GC_INTERVAL_MS = 3600_000;
 const AUTH_ERROR = /interaction_required|login_required|consent_required|popup|access_denied|did not approve|user interaction|cancel/i;
@@ -78,17 +78,22 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
       // Pull: the live week, plus archives/conflicts we don't have yet or that changed since the last sync.
       const currentFile = byName.get(CURRENT_FILE);
       const remoteCurrent = currentFile ? await pull<CurrentWeek>(currentFile.id) : undefined;
-      const archiveIds = new Set(local.archives.map(a => a.id)), conflictIds = new Set(local.conflicts.map(c => c.id));
+      const conflictIds = new Set(local.conflicts.map(c => c.id));
       const remoteArchives: Archive[] = [], remoteConflicts: ConflictCopy[] = [];
       for (const f of files) {
-        const changed = !state.lastSyncedAt || Date.parse(f.modifiedTime) > state.lastSyncedAt;
-        if (f.name.startsWith('archive-') && (!archiveIds.has(f.name.replace('.json', '')) || changed)) remoteArchives.push(await pull<Archive>(f.id));
+        // Device clocks are not a reliable cursor for Drive changes.
+        if (f.name.startsWith('archive-')) remoteArchives.push(await pull<Archive>(f.id));
         else if (f.name.startsWith('conflict-') && !conflictIds.has(f.name.replace('.json', ''))) remoteConflicts.push(await pull<ConflictCopy>(f.id));
       }
 
-      const { state: merged, pushCurrent } = reconcile(local, remoteCurrent, remoteArchives, remoteConflicts);
+      // Recover a successful write whose response was lost (including a tab closed mid-upload).
+      const pendingUpload = await readKv<CurrentWeek>(PENDING_UPLOAD);
+      if (pendingUpload && remoteCurrent?.rev === pendingUpload.rev && remoteCurrent.weekStart === pendingUpload.weekStart) host.markSynced(pendingUpload);
+      // No await between taking this snapshot and applying its merge: edits made during pulls survive.
+      const latest = host.getState();
+      const { state: merged, pushCurrent } = reconcile(latest, remoteCurrent, remoteArchives, remoteConflicts.filter(c => !pending.includes(c.id)));
       const sig = (s: WeekState) => JSON.stringify([s.current.rev, s.current.baseRev, s.current.weekStart, s.archives.map(a => [a.id, a.rev]), s.conflicts.map(c => c.id)]);
-      if (sig(merged) !== sig(local)) host.apply(merged);
+      if (sig(merged) !== sig(latest)) host.apply(merged);
 
       // Push: upload any photos the cloud lacks, then board files.
       const upload = async (doc: BoardDocument) => {
@@ -98,8 +103,12 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
       };
       if (pushCurrent) {
         const c = merged.current;
-        await backend.write(CURRENT_FILE, { ...c, baseRev: c.rev, doc: await upload(c.doc) }, currentFile?.id);
-        host.markSynced(c.rev);
+        const doc = await upload(c.doc);
+        await writeKv(PENDING_UPLOAD, c);
+        await backend.write(CURRENT_FILE, { ...c, baseRev: c.rev, doc }, currentFile?.id);
+        host.markSynced(c);
+        await writeKv(PENDING_UPLOAD, null);
+        if (host.getState().current.rev !== c.rev) queued = true;
       }
       const remoteArchiveById = new Map(remoteArchives.map(a => [a.id, a]));
       for (const a of merged.archives) {

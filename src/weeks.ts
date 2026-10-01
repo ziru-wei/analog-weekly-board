@@ -24,6 +24,13 @@ export interface CurrentWeek { weekStart: string; startedOn: string; updatedAt: 
 export interface ConflictCopy { id: string; createdAt: number; weekStart: string; startedOn: string; kind: 'week' | 'archive'; doc: BoardDocument }
 export interface WeekState { v: 1; current: CurrentWeek; archives: Archive[]; conflicts: ConflictCopy[] }
 
+/** A successful upload advances the base even when editing continued during the request. */
+export function acknowledgeUpload(state: WeekState, uploaded: CurrentWeek): WeekState {
+  const current = state.current;
+  if (current.weekStart !== uploaded.weekStart || (current.baseRev !== uploaded.baseRev && current.rev !== uploaded.rev)) return state;
+  return { ...state, current: { ...current, baseRev: uploaded.rev } };
+}
+
 const LEGACY_KEY = 'analog-weekly-board:v1';
 export const newRev = () => crypto.randomUUID();
 

@@ -71,7 +71,7 @@ async function worker(path: string, body: unknown) {
   try { response = await fetch(`${AUTH_WORKER_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
   catch { throw new Error('Could not reach the sign-in service. Check your connection.'); } // transient: not an auth failure
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(response.status === 400 ? `interaction_required: ${data.error ?? 'invalid_grant'}` : `Sign-in service error (${response.status}).`);
+  if (!response.ok) throw new Error(response.status === 400 ? `interaction_required: ${data.error ?? 'invalid_grant'}` : `Sign-in service error (${response.status}${data.error ? `: ${data.error}${data.error_description ? ` — ${data.error_description}` : ''}` : ''}).`);
   return data;
 }
 const useToken = (data: { access_token: string; expires_in: number }) => { token = { value: data.access_token, expiresAt: Date.now() + Number(data.expires_in) * 1000 }; return token.value; };

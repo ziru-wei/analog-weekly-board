@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type PointerEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, type CSSProperties, type PointerEvent, type MouseEvent } from 'react';
+import { useNoteTextLayout } from './useNoteTextLayout';
 import { Tape } from './Tape';
 import { WebsiteCard } from './WebsiteCard';
 import { PhotoImage } from './PhotoImage';
@@ -14,17 +15,7 @@ export function Item({ item, selected, editing, pinTarget, onPointerDown, onResi
   useEffect(() => { if (editing) (textarea.current ?? captionInput.current)?.focus(); }, [editing]);
   const data = item.data;
   const note = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (data.type !== 'sticky') return;
-    const element = editing ? textarea.current : note.current;
-    if (!element) return;
-    if (data.variant === 'vellum') { element.style.fontSize = `${data.fontSize ?? 16}px`; return; }
-    let fontSize = clamp(Math.min(item.width * .08, item.height * .12), 14, 22);
-    element.style.fontSize = `${fontSize}px`;
-    while (fontSize > 14 && element.scrollHeight > element.clientHeight + 1) {
-      fontSize -= 1; element.style.fontSize = `${fontSize}px`;
-    }
-  }, [item.width, item.height, data, editing]);
+  useNoteTextLayout(item, editing ? textarea : note);
   return <article className={`board-item ${item.type} ${data.type === 'sticky' && data.variant ? `small-label ${data.variant === 'vellum' ? 'vellum-label' : ''}` : ''} ${selected ? 'is-selected' : ''} ${pinTarget ? 'is-pin-target' : ''} ${editing ? 'is-editing' : ''} ${cropping ? 'is-cropping' : ''} ${data.type === 'image' ? `photo-${data.frame}` : ''}`}
     data-item-id={item.id} aria-label={data.type === 'sticky' ? 'Sticky note' : data.type === 'image' ? data.alt : data.type === 'website' ? data.title : 'Blue painter’s tape'}
     style={{ left: item.x, top: item.y, width: item.width, height: item.height, zIndex: item.zIndex + 2, transform: `rotate(${item.rotation}deg)`, '--note-pad': `${clamp(item.width * .06, 9, 18)}px`, '--note-top': `${clamp(item.height * .09, 14, 25)}px`, '--paper': data.type === 'sticky' ? data.color : '#f1eddf', '--shade': .04 + variation(item.id) * .025, '--lift': `${(data.type === 'sticky' ? 1 : 5) + variation(item.id) * (data.type === 'sticky' ? 0.8 : 2)}px` } as CSSProperties}

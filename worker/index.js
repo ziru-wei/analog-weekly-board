@@ -3,8 +3,9 @@
 //   POST /refresh  { refresh_token }                      ->  { access_token, expires_in }
 // Nothing is stored; refresh tokens live only in the user's own browser.
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-// Only extension redirect URLs may be exchanged (Chrome: *.chromiumapp.org, Firefox: *.extensions.allizom.org).
-const REDIRECT_OK = /^https:\/\/[a-z0-9]+\.(chromiumapp\.org|extensions\.allizom\.org)\/$/;
+// Only extension redirect URLs may be exchanged (Chrome: *.chromiumapp.org; Firefox: *.extensions.allizom.org, or the
+// http://127.0.0.1/mozoauth2/<hash> form that current Firefox versions return from identity.getRedirectURL()).
+const REDIRECT_OK = /^(https:\/\/[a-z0-9]+\.(chromiumapp\.org|extensions\.allizom\.org)\/|http:\/\/127\.0\.0\.1\/mozoauth2\/[a-f0-9]{40})$/;
 const ORIGIN_OK = /^(chrome-extension|moz-extension):\/\/[a-z0-9-]+$/;
 
 const cors = origin => ({
@@ -16,19 +17,40 @@ const cors = origin => ({
 });
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...cors(origin) } });
 
+const fingerprint = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))).slice(0, 4), b => b.toString(16).padStart(2, '0')).join('');
+
 async function google(params, env) {
+  if (!(env.GOOGLE_CLIENT_ID ?? '').trim() || !(env.GOOGLE_CLIENT_SECRET ?? '').trim()) {
+    console.error('worker misconfigured: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set');
+    return { status: 500, data: { error: 'server_misconfigured', error_description: 'GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set on the worker' } };
+  }
+  // Secrets pasted into dashboards/terminals often carry a stray newline or space, which Google rejects.
+  const clientId = (env.GOOGLE_CLIENT_ID ?? '').trim(), clientSecret = (env.GOOGLE_CLIENT_SECRET ?? '').trim();
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, ...params }),
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, ...params }),
   });
-  return { status: response.status, data: await response.json().catch(() => ({})) };
+  const data = await response.json().catch(() => ({}));
+  if (response.status !== 200) {
+    // Visible with `wrangler tail`. The fingerprint is the first 4 bytes of SHA-256 of the secret: it can be compared with
+    // `printf %s "$SECRET" | shasum -a 256 | cut -c1-8` but cannot reveal the secret.
+    console.error('google token endpoint:', response.status, data.error, data.error_description, JSON.stringify({
+      client_id: clientId, secret_length: clientSecret.length, raw_length: (env.GOOGLE_CLIENT_SECRET ?? '').length,
+      secret_prefix_ok: clientSecret.startsWith('GOCSPX-'), secret_fp: await fingerprint(clientSecret),
+    }));
+  }
+  return { status: response.status, data };
 }
 
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') ?? '';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
+    // Configuration check: lists binding NAMES only (never values) so a missing secret is easy to spot.
+    if (request.method === 'GET' && new URL(request.url).pathname === '/health') {
+      return new Response(JSON.stringify({ ok: true, bindings: Object.keys(env).sort(), has_client_id: !!env.GOOGLE_CLIENT_ID, has_client_secret: !!(env.GOOGLE_CLIENT_SECRET ?? '').trim() }), { headers: { 'Content-Type': 'application/json' } });
+    }
     if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, origin);
     if (!ORIGIN_OK.test(origin)) return json({ error: 'forbidden_origin' }, 403, origin);
     const path = new URL(request.url).pathname;

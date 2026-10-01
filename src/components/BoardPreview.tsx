@@ -1,18 +1,26 @@
-import { type BoardDocument, type BoardItem, pinPosition } from '../model';
+import { useRef, type CSSProperties } from 'react';
+import { type BoardDocument, type BoardItem, clamp, pinPosition } from '../model';
 import { ropePath } from './Ropes';
+import { Tape } from './Tape';
+import { useNoteTextLayout } from './useNoteTextLayout';
 
 // A static, vector rendition of a board, used for archive thumbnails and the full-size archive viewer.
 function PreviewItem({ item }: { item: BoardItem }) {
+  const note = useRef<HTMLDivElement>(null);
+  useNoteTextLayout(item, note);
   const { x, y, width: w, height: h, data } = item;
   const transform = `rotate(${item.rotation} ${x + w / 2} ${y + h / 2})`;
   const shadow = 'drop-shadow(0 3px 4px #28140866)';
-  if (data.type === 'tape') return <rect x={x} y={y} width={w} height={h} fill="#e9dfc4" opacity=".72" transform={transform} />;
+  if (data.type === 'tape') return <foreignObject x={x} y={y} width={w} height={h} transform={transform} style={{ overflow: 'visible' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}><Tape /></div>
+  </foreignObject>;
   if (data.type === 'sticky') {
-    const label = !!data.variant;
     return <g transform={transform} style={{ filter: shadow }}>
       <rect x={x} y={y} width={w} height={h} fill={data.color} />
       <foreignObject x={x} y={y} width={w} height={h}>
-        <div style={{ boxSizing: 'border-box', padding: label ? '4px 10px' : `${h * .09}px ${w * .06}px`, font: `300 ${data.fontSize ?? (label ? 17 : 22)}px/1.22 Kalam, cursive`, color: label ? '#ece7da' : '#494639', whiteSpace: 'pre-wrap', overflow: 'hidden', height: '100%' }}>{data.text}</div>
+        <div className={`${data.variant ? 'small-label' : ''} ${data.variant === 'vellum' ? 'vellum-label' : ''}`} style={{ height: '100%', '--note-pad': `${clamp(w * .06, 9, 18)}px`, '--note-top': `${clamp(h * .09, 14, 25)}px` } as CSSProperties}>
+          <div ref={note} className="note-text" style={{ overflow: 'hidden' }}>{data.text}</div>
+        </div>
       </foreignObject>
     </g>;
   }
@@ -27,8 +35,8 @@ function PreviewItem({ item }: { item: BoardItem }) {
   return <g transform={transform} style={{ filter: shadow }}>
     <rect x={x} y={y} width={w} height={h} fill="#f7f6f1" />
     <foreignObject x={x} y={y} width={w} height={h}>
-      <div style={{ boxSizing: 'border-box', padding: '14px 16px', font: '600 20px/1.2 "DM Sans", sans-serif', color: '#2b2a27', overflow: 'hidden', height: '100%' }}>
-        <div style={{ font: '400 12px "DM Sans", sans-serif', color: '#8a867b', marginBottom: 6 }}>{data.domain}</div>{data.title}
+      <div style={{ boxSizing: 'border-box', padding: '14px 16px', font: "620 20px/1.16 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: '#2b2a27', overflowWrap: 'anywhere', overflow: 'hidden', height: '100%' }}>
+        <div style={{ font: "550 12px/1.2 'IBM Plex Mono', 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace", color: '#8a867b', marginBottom: 6 }}>{data.domain}</div>{data.title}
       </div>
     </foreignObject>
   </g>;

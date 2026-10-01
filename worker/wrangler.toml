@@ -4,5 +4,5 @@ compatibility_date = "2025-01-01"
 
 [vars]
 # Public identifier of your Google OAuth "Web application" client (same value as VITE_GOOGLE_CLIENT_ID).
-GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "61518282198-rmaefk168iap3hl1h9vli7tchtajvdj3.apps.googleusercontent.com"
 # The client SECRET is never committed — set it with:  npx wrangler secret put GOOGLE_CLIENT_SECRET

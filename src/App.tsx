@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
-import { type WeekState, archiveOf, newRev, rollover, saveWeekState } from './weeks';
+import { type WeekState, acknowledgeUpload, archiveOf, newRev, rollover, saveWeekState } from './weeks';
 import { writeCurrent } from './storage';
 import { cloud, useCloud } from './cloud/sync';
 import { type BoardItem, type Pin as PinModel, type Point, clamp, localPoint, photoMargins, pinPosition } from './model';
@@ -72,13 +72,15 @@ export default function App() {
     const flush = () => { void writeCurrent(liveState().current); };
     const unsubscribe = store.subscribe(() => {
       if (replacing.current) return;
-      weeksRef.current = { ...weeksRef.current, current: { ...weeksRef.current.current, updatedAt: Date.now(), rev: newRev() } };
+      const doc = store.getSnapshot();
+      if (doc === weeksRef.current.current.doc) return;
+      weeksRef.current = { ...weeksRef.current, current: { ...weeksRef.current.current, doc, updatedAt: Date.now(), rev: newRev() } };
       clearTimeout(timer); timer = setTimeout(flush, 400); cloud.changed();
     });
     cloud.attach({
       getState: liveState,
       apply: next => commit(next, next.current.rev !== weeksRef.current.current.rev),
-      markSynced: rev => { if (weeksRef.current.current.rev === rev) { weeksRef.current = { ...weeksRef.current, current: { ...weeksRef.current.current, baseRev: rev } }; void writeCurrent(liveState().current); } },
+      markSynced: uploaded => { weeksRef.current = acknowledgeUpload(liveState(), uploaded); void writeCurrent(liveState().current); },
     });
     void cloud.resume();
     window.addEventListener('pagehide', flush);
