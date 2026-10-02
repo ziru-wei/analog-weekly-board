@@ -19,6 +19,8 @@ Sync uses a local revision and the last acknowledged cloud revision. Requests ru
 
 Run `npm test` for sync regression tests and `npm run typecheck` for TypeScript validation. `npm run package:amo` prepares the Firefox extension, source archive, and reviewer notes in `release/amo/`. See [CHANGELOG.md](CHANGELOG.md) for changes.
 
+Conflict detection ignores spaces/tabs in displayed text and translations of up to 5 board pixels per item or pin. Line breaks, actual content, URLs, images, sizing, rotation, and layer order still matter. When two divergent current boards differ only within this tolerance, the cloud version becomes current without a conflict copy; archives retain the existing timestamp-based winner. Ordinary one-sided edits still sync normally. Existing conflict copies remain available, but another near-identical copy for the same week and kind is not added.
+
 - Double-click empty cork to create and edit a compact, unpinned black label with white text. Drag from the bottom-left paper stack to create a compact sticky note without a pin; its next top sheet gets a random color. A separate supply to the right of the stack, near the board’s lower edge, has seven pins (three above, four below): elapsed weekdays including today are red, with the remaining pins white, counting Monday first. Drag a supply pin to copy it; drop on cork for an independent pin or on any component to attach it and follow that component.
 - Double-click a note to write. Right-click a note for the metal paper-color palette.
 - Paste an image from the clipboard to add a borderless photograph. File pickers and image dropping are intentionally unavailable. Paste a full HTTP(S) URL to add a website clipping.

@@ -1,6 +1,7 @@
 import { createDemo } from './demo';
 import type { BoardDocument } from './model';
 import { readStored, writeArchives, writeConflicts, writeCurrent } from './storage';
+import { equivalentBoards } from './cloud/equivalence';
 
 // Weeks run Monday–Sunday in the user's local time. The first week may be a partial one (started mid-week).
 export interface Archive {
@@ -69,7 +70,7 @@ export function rollover(state: WeekState, now = new Date()): WeekState {
 
 export interface Reconciled { state: WeekState; pushCurrent: boolean }
 /**
- * Combine this device's state with what the cloud holds, without ever silently discarding edits:
+ * Combine this device's state with what the cloud holds, preserving meaningful divergent edits:
  * - archives are unioned (identical `rev` = same content);
  * - the live week fast-forwards when only one side changed;
  * - if both sides changed, the cloud version stays current and the local edits are kept as a conflict copy.
@@ -80,6 +81,7 @@ export function reconcile(local: WeekState, remoteCurrent: CurrentWeek | undefin
   remoteConflicts.forEach(c => { if (!conflicts.has(c.id)) conflicts.set(c.id, c); });
   const addConflict = (copy: Omit<ConflictCopy, 'id' | 'createdAt'> & { rev: string }) => {
     const id = `conflict-${copy.weekStart}-${copy.rev}`;
+    if ([...conflicts.values()].some(c => c.weekStart === copy.weekStart && c.kind === copy.kind && equivalentBoards(c.doc, copy.doc))) return;
     if (!conflicts.has(id)) conflicts.set(id, { id, createdAt: now.getTime(), weekStart: copy.weekStart, startedOn: copy.startedOn, kind: copy.kind, doc: copy.doc });
   };
   const put = (a: Archive) => {
@@ -88,7 +90,7 @@ export function reconcile(local: WeekState, remoteCurrent: CurrentWeek | undefin
     if (existing.rev === a.rev) return;
     const [winner, loser] = (a.updatedAt ?? 0) > (existing.updatedAt ?? 0) ? [a, existing] : [existing, a];
     archives.set(a.id, winner);
-    if (!isEmpty(loser.doc)) addConflict({ weekStart: loser.weekStart, startedOn: loser.startedOn, kind: 'archive', doc: loser.doc, rev: loser.rev });
+    if (!isEmpty(loser.doc) && !equivalentBoards(winner.doc, loser.doc)) addConflict({ weekStart: loser.weekStart, startedOn: loser.startedOn, kind: 'archive', doc: loser.doc, rev: loser.rev });
   };
   remoteArchives.forEach(put);
 
@@ -108,7 +110,7 @@ export function reconcile(local: WeekState, remoteCurrent: CurrentWeek | undefin
   } else if (!dirty) {
     current = { ...remoteCurrent, baseRev: remoteCurrent.rev, startedOn: remoteCurrent.startedOn < local.current.startedOn ? remoteCurrent.startedOn : local.current.startedOn };
   } else { // both changed since the last sync: keep the cloud version, set our edits aside
-    addConflict({ weekStart: local.current.weekStart, startedOn: local.current.startedOn, kind: 'week', doc: local.current.doc, rev: local.current.rev });
+    if (!equivalentBoards(local.current.doc, remoteCurrent.doc)) addConflict({ weekStart: local.current.weekStart, startedOn: local.current.startedOn, kind: 'week', doc: local.current.doc, rev: local.current.rev });
     current = { ...remoteCurrent, baseRev: remoteCurrent.rev };
   }
   const state = rollover({ v: 1, current, archives: [...archives.values()], conflicts: [...conflicts.values()] }, now);
