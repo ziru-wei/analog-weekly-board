@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from 'react';
+import { memo, useRef, type CSSProperties } from 'react';
 import { type BoardDocument, type BoardItem, clamp, pinPosition } from '../model';
 import { ropePath } from './Ropes';
 import { Tape } from './Tape';
@@ -42,16 +42,28 @@ function PreviewItem({ item }: { item: BoardItem }) {
   </g>;
 }
 
-export function BoardPreview({ doc, className }: { doc: BoardDocument; className?: string }) {
+function SimpleItem({ item }: { item: BoardItem }) {
+  const { x, y, width, height, data } = item;
+  const text = data.type === 'sticky' ? data.text : data.type === 'website' ? data.title : '';
+  const rows = text.trim() ? Math.min(4, Math.max(1, Math.ceil(text.length / 24)), Math.max(1, Math.floor((height - 20) / 20))) : 0;
+  return <g transform={`rotate(${item.rotation} ${x + width / 2} ${y + height / 2})`}>
+    <rect x={x} y={y} width={width} height={height} fill={data.type === 'tape' ? '#3f83b7' : data.type === 'sticky' ? data.color : data.type === 'image' ? '#b0aaa0' : '#f7f6f1'} />
+    {data.type === 'image' && <image href={data.src} x={x + 6} y={y + 6} width={Math.max(1, width - 12)} height={Math.max(1, height - 12)} preserveAspectRatio="xMidYMid slice" />}
+    {Array.from({ length: rows }, (_, i) => <rect key={i} x={x + width * .08} y={y + 12 + i * 20} width={width * (i === rows - 1 ? .48 : .8)} height={5} rx={2} fill="#77756f" opacity=".55" />)}
+  </g>;
+}
+
+export const BoardPreview = memo(function BoardPreview({ doc, className, simplified = false }: { doc: BoardDocument; className?: string; simplified?: boolean }) {
   const items = Object.values(doc.items).sort((a, b) => a.zIndex - b.zIndex);
   const position = (pinId: string) => { const pin = doc.pins[pinId]; return pin ? pinPosition(pin, pin.itemId ? doc.items[pin.itemId] : undefined) : null; };
   return <svg className={className} viewBox={`0 0 ${doc.board.width} ${doc.board.height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Board: ${doc.board.title}`}>
     {Object.values(doc.connections).map(c => {
       const a = position(c.fromPinId), b = position(c.toPinId); if (!a || !b) return null;
       const d = ropePath(a, b);
+      if (simplified) return <path key={c.id} d={d} fill="none" stroke="#554234" strokeWidth="2.2" />;
       return <g key={c.id} fill="none" strokeLinecap="round"><path d={d} stroke="#281a10" strokeWidth="3.2" opacity=".3" transform="translate(2 6)" /><path d={d} stroke="#554234" strokeWidth="2.2" /></g>;
     })}
-    {items.map(item => <PreviewItem key={item.id} item={item} />)}
-    {Object.values(doc.pins).map(pin => { const p = position(pin.id); return p && <g key={pin.id}><circle cx={p.x + 2} cy={p.y + 5} r="7" fill="#20140e" opacity=".35" /><circle cx={p.x} cy={p.y} r="7" fill={pin.color} /><circle cx={p.x - 2} cy={p.y - 2.5} r="2" fill="#fff" opacity=".7" /></g>; })}
+    {items.map(item => simplified ? <SimpleItem key={item.id} item={item} /> : <PreviewItem key={item.id} item={item} />)}
+    {Object.values(doc.pins).map(pin => { const p = position(pin.id); return p && (simplified ? <circle key={pin.id} cx={p.x} cy={p.y} r="7" fill={pin.color} /> : <g key={pin.id}><circle cx={p.x + 2} cy={p.y + 5} r="7" fill="#20140e" opacity=".35" /><circle cx={p.x} cy={p.y} r="7" fill={pin.color} /><circle cx={p.x - 2} cy={p.y - 2.5} r="2" fill="#fff" opacity=".7" /></g>); })}
   </svg>;
-}
+});

@@ -2,12 +2,13 @@ import { createDemo } from './demo';
 import type { BoardDocument } from './model';
 import { readStored, writeArchives, writeConflicts, writeCurrent } from './storage';
 import { equivalentBoards } from './cloud/equivalence';
+import { getWeekPreference, loadWeekPreference } from './weekPreferences';
 
-// Weeks run Monday–Sunday in the user's local time. The first week may be a partial one (started mid-week).
+// Weeks use the selected starting weekday in local time (Monday by default).
 export interface Archive {
   id: string;
-  weekStart: string; // Monday, YYYY-MM-DD
-  weekEnd: string; // Sunday, YYYY-MM-DD
+  weekStart: string; // YYYY-MM-DD
+  weekEnd: string; // inclusive, YYYY-MM-DD
   startedOn: string; // first day the board was used this week; later than weekStart for a partial week
   archivedAt: string;
   /** When the board's content last changed (ms). */
@@ -39,12 +40,12 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const fromISO = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 export const mondayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
-export const weekStartISO = (d: Date) => toISO(mondayOf(d));
+export const weekStartISO = (d: Date, day = getWeekPreference().day) => toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - day + 7) % 7)));
 export const weekEndISO = (weekStart: string) => { const d = fromISO(weekStart); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6)); };
 
 const fmt = (iso: string, withYear: boolean) => fromISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
-export function weekLabel(weekStart: string, startedOn = weekStart) {
-  const from = startedOn > weekStart ? startedOn : weekStart, end = weekEndISO(weekStart);
+export function weekLabel(weekStart: string, startedOn = weekStart, end = weekEndISO(weekStart)) {
+  const from = startedOn > weekStart ? startedOn : weekStart;
   return `${fmt(from, false)} – ${fmt(end, fromISO(end).getFullYear() !== new Date().getFullYear() || fromISO(from).getFullYear() !== fromISO(end).getFullYear())}`;
 }
 export const isPartial = (weekStart: string, startedOn: string) => startedOn > weekStart;
@@ -63,8 +64,15 @@ export const archiveOf = (current: CurrentWeek, now = new Date()): Archive => ({
 /** Archive the current board if its week is over, and start a fresh board for the week containing `now`. */
 export function rollover(state: WeekState, now = new Date()): WeekState {
   const thisWeek = weekStartISO(now);
+  const { effectiveFrom } = getWeekPreference();
+  if (effectiveFrom && thisWeek < effectiveFrom) return state;
   if (state.current.weekStart >= thisWeek) return state;
-  const archives = isEmpty(state.current.doc) ? state.archives : [...state.archives.filter(a => a.weekStart !== state.current.weekStart), archiveOf(state.current, now)];
+  const archived = archiveOf(state.current, now);
+  if (effectiveFrom && state.current.weekStart < effectiveFrom) {
+    const boundary = fromISO(effectiveFrom);
+    archived.weekEnd = toISO(new Date(boundary.getFullYear(), boundary.getMonth(), boundary.getDate() - 1));
+  }
+  const archives = isEmpty(state.current.doc) ? state.archives : [...state.archives.filter(a => a.weekStart !== state.current.weekStart), archived];
   return { ...state, archives, current: freshCurrent(thisWeek, toISO(now), emptyBoard(thisWeek)) };
 }
 
@@ -119,6 +127,7 @@ export function reconcile(local: WeekState, remoteCurrent: CurrentWeek | undefin
 
 export async function loadWeekState(now = new Date()): Promise<WeekState> {
   try {
+    await loadWeekPreference();
     const stored = await readStored();
     if (stored.current) {
       const c = stored.current as Partial<CurrentWeek> & Pick<CurrentWeek, 'weekStart' | 'startedOn' | 'doc'>;

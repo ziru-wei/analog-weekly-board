@@ -8,7 +8,7 @@ const base = {
   manifest_version: 3,
   name: 'Analog Weekly Board',
   version: pkg.version,
-  description: 'A weekly corkboard that archives itself every Monday and syncs through your Google Drive.',
+  description: 'A weekly corkboard that archives itself weekly and syncs through your Google Drive.',
   action: { default_title: 'Open Analog Weekly Board', default_icon: { 128: 'icons/icon-128.png' } },
   icons: { 128: 'icons/icon-128.png' },
   permissions: ['identity', 'unlimitedStorage'],

@@ -56,3 +56,23 @@
 .dash-conflict-actions button { padding: 6px 11px; border-radius: 7px; font-size: 12.5px; background: #2c2d29; }
 .dash-conflict-actions button:hover { background: #363731; }
 .cloud-uri { user-select: all; word-break: break-all; }
+
+.dash-head { align-items: flex-start; }
+.dash-week-settings { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 13px; color: #8f8b80; }
+.dash-week-settings label { display: flex; align-items: center; gap: 7px; }
+.dash-week-settings select { font: inherit; color: #d1ccc2; background: #262724; border: 1px solid #ffffff18; border-radius: 6px; padding: 5px 8px; }
+.cloud-profile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+.cloud-profile-button { width: 42px; height: 42px; padding: 0; border-radius: 50%; background: #3a3b36; display: grid; place-items: center; overflow: hidden; box-shadow: 0 0 0 1px #ffffff20; }
+.cloud-profile-button img { width: 100%; height: 100%; object-fit: cover; }
+.cloud-profile-button:focus-visible { outline: 2px solid #d9c79b; outline-offset: 4px; }
+.cloud-profile > .cloud-status { margin: 0; font-size: 11px; white-space: nowrap; }
+.cloud-account-menu { position: absolute; top: 78px; right: 0; z-index: 4; width: min(260px, calc(100vw - 40px)); padding: 8px; border-radius: 12px; border: 1px solid #ffffff16; background: #262724; box-shadow: 0 12px 36px #0006; }
+.cloud-account-identity { display: flex; flex-direction: column; gap: 5px; padding: 10px; border-bottom: 1px solid #ffffff12; margin-bottom: 5px; overflow-wrap: anywhere; }
+.cloud-account-identity b { font-size: 14px; color: #ece6d9; }
+.cloud-account-identity span { font-size: 12px; color: #aaa69c; }
+.cloud-account-menu button { display: block; width: 100%; text-align: left; padding: 10px; border-radius: 6px; font-size: 13px; }
+.cloud-account-menu button:hover, .cloud-account-menu button:focus-visible { background: #ffffff0c; }
+.cloud-account-menu button:disabled { opacity: .5; }
+.cloud-account-menu p { margin: 8px 10px; font-size: 12px; }
+.cloud-account-error { color: #d98f84; }
+.dash-card { content-visibility: auto; contain-intrinsic-size: auto 220px; }

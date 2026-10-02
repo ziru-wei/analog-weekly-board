@@ -13,7 +13,7 @@ Open the Vite URL (normally http://localhost:5173). History uses keyboard shortc
 
 ## Weekly archive, Dashboard & sync
 
-Each Monday–Sunday week has its own board; when Monday arrives the finished week is archived automatically (the first week may be partial). Double-click the dark area outside the board to open the **Dashboard** with every archive (Esc returns). Data lives in IndexedDB. Sign in with Google on the Dashboard to sync boards, archives and photos across devices through the hidden app-data folder of your Google Drive — see [docs/google-drive-setup.md](docs/google-drive-setup.md). Browser extensions: `npm run build:ext` (Chrome + Firefox); long-lived sign-in needs the tiny auth worker in [worker/](worker/README.md).
+Each week has its own board (Monday by default); when the selected starting weekday arrives the finished week is archived automatically (the first week may be partial). Double-click the dark area outside the board to open the **Dashboard** with every archive (Esc returns). Data lives in IndexedDB. Sign in with Google on the Dashboard to sync boards, archives and photos across devices through the hidden app-data folder of your Google Drive — see [docs/google-drive-setup.md](docs/google-drive-setup.md). Browser extensions: `npm run build:ext` (Chrome + Firefox); long-lived sign-in needs the tiny auth worker in [worker/](worker/README.md).
 
 Sync uses a local revision and the last acknowledged cloud revision. Requests run serially; downloads merge against the latest local state, and successful uploads advance the baseline even if editing continued during the request. An IndexedDB upload checkpoint recovers acknowledgements after interrupted requests. Photos remain separate content-addressed assets. Genuine divergent edits preserve a conflict copy; existing copies can be restored or discarded in the Dashboard. This is periodic snapshot sync, not real-time collaborative editing: simultaneous writes from different devices to Drive are not atomic.
 
@@ -58,3 +58,5 @@ With nothing selected or being edited, typing produces a translucent tracing-pap
 ## License
 
 Source code: [GPL-3.0-or-later](LICENSE) — required because the app uses `@threepipe/webgi-plugins` (GPL-3.0 with additional terms). Bundled fonts and images keep their own licenses: LXGW WenKai and Sarasa Mono are under the SIL Open Font License; check the license of any other font or image before reusing it.
+
+Choose **Begins on** in Dashboard to change the starting weekday across your signed-in devices. The weekday and effective date sync through Drive; concurrent settings changes use the latest edit. The change takes effect on the next selected weekday without replacing the current board. Account actions are available from the top-right avatar. Thumbnail text and tape use simplified rendering; opened archives retain detail.

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { SyncStatus } from './components/SyncStatus';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
 import { type WeekState, acknowledgeUpload, archiveOf, newRev, rollover, saveWeekState } from './weeks';
@@ -461,9 +462,7 @@ export default function App() {
         ? <><b>drag</b> to crop &nbsp;·&nbsp; <b>enter</b> apply &nbsp;·&nbsp; <b>esc</b> cancel &nbsp;·&nbsp; <b>r</b> reset</>
         : <><b>enter</b> frame &nbsp;·&nbsp; <b>space</b> enlarge &nbsp;·&nbsp; <b>double-click</b> crop</>}</p>}
     {dashboard && <Dashboard archives={weeks.archives} conflicts={weeks.conflicts} onResolve={resolveConflict} current={{ ...weeks.current, doc: store.getSnapshot() }} onClose={() => setDashboard(false)} />}
-    <div className="board-status"><span className={`sync-${cloudState.status}`} title="Saved in this browser. Each Monday-to-Sunday week is archived automatically; double-click outside the board for the dashboard."><i />{
-      cloudState.status === 'syncing' ? 'Syncing…' : cloudState.status === 'idle' ? `Synced${cloudState.user ? ` · ${cloudState.user.email}` : ''}`
-      : cloudState.status === 'needs-reconnect' ? 'Sync paused · reconnect in dashboard' : cloudState.status === 'error' ? 'Sync failed' : cloudState.status === 'connecting' ? 'Connecting…' : 'Local only'}</span></div>
+    <div className="board-status"><span className={`sync-${cloudState.status}`} title="Saved in this browser. Open Dashboard for sync and weekly settings."><i /><SyncStatus state={cloudState} /></span></div>
     <p className="board-hint"><b>double-click</b> outside the board &nbsp;·&nbsp; dashboard</p>
     {palettePoint && palettePos && <ColorPalette kind={palettePin ? 'pin' : 'paper'} value={palettePin?.color ?? (paletteItem?.data.type === 'sticky' ? paletteItem.data.color : '')}
       x={clamp(palettePos.x, 116, size.width - 116)} y={clamp(palettePos.y + 16, 14, size.height - 64)}

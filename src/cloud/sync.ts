@@ -6,6 +6,7 @@ import { fetchUser, hasRefreshFlow, hasValidToken, invalidateToken, requestToken
 import { externalize, internalize } from './assets';
 import { isCloudConfigured } from './config';
 import * as drive from './drive';
+import { mergeWeekPreference, type WeekPreference } from '../weekPreferences';
 
 export interface Backend {
   list(): Promise<drive.DriveFile[]>;
@@ -62,6 +63,12 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
       const pending = (await readKv<string[]>(PENDING_DELETES)) ?? [];
       for (const id of pending) { const f = byName.get(`${id}.json`); if (f) await backend.remove(f.id); byName.delete(`${id}.json`); }
       if (pending.length) { await writeKv(PENDING_DELETES, []); files = files.filter(f => byName.has(f.name)); }
+
+      // Merge the shared calendar before reconciling boards or deciding when to archive them.
+      const settingsFile = byName.get('settings.json');
+      const remoteSettings = settingsFile ? await backend.read<WeekPreference>(settingsFile.id) : undefined;
+      const settings = await mergeWeekPreference(remoteSettings);
+      if (!remoteSettings || settings.rev !== remoteSettings.rev) await backend.write('settings.json', settings, settingsFile?.id);
 
       const local = host.getState();
       // Photos we already hold locally never need downloading.

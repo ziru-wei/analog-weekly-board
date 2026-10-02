@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { acknowledgeUpload, emptyBoard, reconcile, weekStartISO, type CurrentWeek, type WeekState } from '../src/weeks';
+import { getWeekPreference } from '../src/weekPreferences';
 import { readKv, writeKv } from '../src/storage';
 import { createCloud, type Backend } from '../src/cloud/sync';
 
@@ -17,8 +18,8 @@ const stateOf = (c = current()): WeekState => ({ v: 1, current: c, archives: [],
 function fixture(initial = current('edit')) {
   let local = stateOf(initial), remote = current();
   const backend: Backend = {
-    list: async () => [{ id: 'current', name: 'current.json', modifiedTime: new Date().toISOString() }],
-    read: vi.fn(async () => structuredClone(remote)) as Backend['read'],
+    list: async () => [{ id: 'current', name: 'current.json', modifiedTime: new Date().toISOString() }, { id: 'settings', name: 'settings.json', modifiedTime: '' }],
+    read: vi.fn(async (id: string) => structuredClone(id === 'settings' ? getWeekPreference() : remote)) as Backend['read'],
     write: vi.fn(async (_name, value) => { remote = structuredClone(value as CurrentWeek); }),
     readAsset: vi.fn(), writeAsset: vi.fn(), remove: vi.fn(),
   };
@@ -50,7 +51,7 @@ test('continuous edits during uploads advance the base without creating self-con
 test('edits made during downloads are included in the merge and upload', async () => {
   const f = fixture(current());
   const read = f.backend.read;
-  f.backend.read = async id => { f.edit('during-download'); return read(id); };
+  f.backend.read = async id => { if (id === 'current') f.edit('during-download'); return read(id); };
   await f.engine.signIn();
   expect(f.local().current.rev).toBe('during-download');
   expect(f.remote().doc.board.title).toBe('during-download');
@@ -93,4 +94,15 @@ test('genuine offline divergence still preserves one stable conflict copy', () =
   expect(first.state.conflicts).toHaveLength(1);
   expect(first.state.conflicts[0].doc.board.title).toBe('local edits');
   expect(reconcile(first.state, remote, [], []).state.conflicts).toHaveLength(1);
+});
+
+test('sync pulls the shared week preference before merging boards', async () => {
+  const f = fixture(current());
+  const read = f.backend.read;
+  const remotePreference = { day: 0, effectiveFrom: '2099-01-04', updatedAt: Date.now(), rev: 'calendar-remote' };
+  f.backend.read = async <T,>(id: string): Promise<T> => id === 'settings' ? remotePreference as T : read<T>(id);
+  await f.engine.signIn();
+  expect(f.engine.getState().status).toBe('idle');
+  expect(getWeekPreference()).toEqual(remotePreference);
+  expect(await readKv('week-start-preference')).toEqual(remotePreference);
 });
