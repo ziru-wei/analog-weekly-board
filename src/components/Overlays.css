@@ -5,6 +5,6 @@
 .lb-photo .photo-reflection { pointer-events: none; }
 .overlay-hint { position: absolute; left: 0; right: 0; bottom: 22px; margin: 0; text-align: center; font-size: 10px; letter-spacing: .3px; color: #d4cbbc66; pointer-events: none; }
 .board-hint, .photo-hint { position: fixed; z-index: 19; margin: 0; font-size: 10px; letter-spacing: .3px; color: #d4cbbc66; pointer-events: none; white-space: nowrap; }
-.board-hint { right: 25px; bottom: 12px; }
+.board-hint { left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; line-height: 15px; letter-spacing: 0; color: #d4cbbccc; white-space: normal; }
 .photo-hint { left: 50%; transform: translateX(-50%); }
-.photo-hint b, .board-hint b { font-weight: 500; color: #d4cbbc99; }
+.photo-hint b, .board-hint b { font-weight: 500; color: #eee8dc; }

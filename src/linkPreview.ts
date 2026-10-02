@@ -1,4 +1,5 @@
-export interface LinkPreview { title: string; description: string; image: string; restricted?: boolean; needsPermission?: boolean }
+import { parseXiaohongshuPreview, type XiaohongshuMedia } from '../worker/xiaohongshu.js';
+export interface LinkPreview { title: string; description: string; image: string; media?: XiaohongshuMedia; restricted?: boolean; needsPermission?: boolean }
 
 export function publicWebUrl(value: string, base?: string): string | null {
   try {
@@ -10,6 +11,7 @@ export function publicWebUrl(value: string, base?: string): string | null {
 
 /** Extract text and image URLs only. The remote document is never mounted or executed. */
 export function parseLinkPreview(html: string, url: string): LinkPreview {
+  const xhs = parseXiaohongshuPreview(html, url); if (xhs) return xhs;
   const inert = html.replace(/<(script|style|iframe|object|video|audio)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
     .replace(/<(?:link|base|embed)\b[^>]*>/gi, '')
     .replace(/(<img\b[^>]*?)\bsrc\s*=/gi, '$1data-preview-src=');
@@ -30,25 +32,40 @@ export function parseLinkPreview(html: string, url: string): LinkPreview {
   return { title, description, image };
 }
 
-const previews = new Map<string, Promise<LinkPreview | null>>();
+const previews = new Map<string, { task: Promise<LinkPreview | null>; expires: number }>();
 export function loadLinkPreview(url: string): Promise<LinkPreview | null> {
   if (!publicWebUrl(url)) return Promise.resolve(null);
-  const cached = previews.get(url); if (cached) return cached;
+  const cached = previews.get(url); if (cached && cached.expires > Date.now()) return cached.task;
   const task = (async () => {
-    type Runtime = { id?: string; sendMessage(message: unknown): Promise<{ ok: boolean; html?: string; url?: string; restricted?: boolean; needsPermission?: boolean }> };
+    type Result = { ok: boolean; html?: string; url?: string; preview?: LinkPreview; restricted?: boolean; needsPermission?: boolean };
+    type Runtime = { id?: string; sendMessage(message: unknown): Promise<Result> };
     const scope = globalThis as typeof globalThis & { browser?: { runtime?: Runtime }; chrome?: { runtime?: Runtime } };
     const runtime = scope.browser?.runtime ?? scope.chrome?.runtime;
     if (runtime?.id) {
       const response = await runtime.sendMessage({ type: 'link-preview', url });
+      if (response?.ok && response.preview) return response.preview;
       if (!response?.ok || !response.html || !response.url) return response?.needsPermission ? { title: '', description: '', image: '', needsPermission: true } : response?.restricted ? { title: '', description: '', image: '', restricted: true } : null;
       return parseLinkPreview(response.html, response.url);
     }
+    const worker = (import.meta.env.VITE_PREVIEW_WORKER_URL || import.meta.env.VITE_AUTH_WORKER_URL || '').replace(/\/$/, '');
+    const endpoint = import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '/api/link-preview' : worker ? `${worker}/api/link-preview` : '';
+    if (endpoint) {
+      try {
+        const response = await fetch(`${endpoint}?${new URLSearchParams({ url })}`, { credentials: 'omit', signal: AbortSignal.timeout(16000) });
+        if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+          const result = await response.json() as Result;
+          if (result.ok && result.preview) return result.preview;
+          if (result.ok && result.html && result.url) return parseLinkPreview(result.html, result.url);
+          if (result.restricted) return { title: '', description: '', image: '', restricted: true };
+        }
+      } catch { /* Try sites which permit a direct browser fetch. */ }
+    }
     const response = await fetch(url, { credentials: 'omit', signal: AbortSignal.timeout(8000) });
     if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return null;
-    return parseLinkPreview((await response.text()).slice(0, 2_000_000), response.url);
-  })().catch(() => null);
+    return parseLinkPreview((await response.text()).slice(0, 2_000_000), response.url || url);
+  })().catch(() => null).then(result => { if (!result || result.restricted || result.needsPermission) previews.delete(url); return result; });
   if (previews.size > 200) previews.delete(previews.keys().next().value!);
-  previews.set(url, task);
+  previews.set(url, { task, expires: Date.now() + 5 * 60_000 });
   return task;
 }
 

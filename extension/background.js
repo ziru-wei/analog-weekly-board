@@ -52,6 +52,30 @@ api.runtime.onMessage.addListener((message, sender) => {
   try { url = new URL(message.url); } catch { return Promise.resolve({ ok: false }); }
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return Promise.resolve({ ok: false });
   return (async () => {
+    // The public Bilibili API returns the actual title and cover even when the
+    // player document has only a generic title. Never send account cookies.
+    let bvid = '', aid = '';
+    if (['www.bilibili.com', 'bilibili.com', 'm.bilibili.com'].includes(url.hostname)) {
+      const id = /^\/video\/(BV[\dA-Za-z]{10}|av[1-9]\d{0,15})\/?$/.exec(url.pathname)?.[1] ?? '';
+      if (id.startsWith('BV')) bvid = id; else if (id) aid = id.slice(2);
+    } else if (url.hostname === 'player.bilibili.com' && url.pathname === '/player.html') {
+      bvid = url.searchParams.get('bvid') ?? ''; aid = url.searchParams.get('aid') ?? '';
+    }
+    const apiUrl = new URL('https://api.bilibili.com/x/web-interface/view');
+    if (/^BV[\dA-Za-z]{10}$/.test(bvid)) apiUrl.searchParams.set('bvid', bvid);
+    else if (/^[1-9]\d{0,15}$/.test(aid)) apiUrl.searchParams.set('aid', aid);
+    if (apiUrl.search && await api.permissions.contains({ origins: ['https://api.bilibili.com/*'] })) {
+      try {
+        const response = await fetch(apiUrl.href, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(6000) });
+        const result = response.ok ? await response.json() : null;
+        if (result?.code === 0 && typeof result.data?.title === 'string' && result.data.title.trim()) {
+          const { title, desc, pic } = result.data;
+          let image = ''; try { const cover = new URL(pic); if (['http:', 'https:'].includes(cover.protocol) && !cover.username && !cover.password) { cover.protocol = 'https:'; image = cover.href; } } catch { /* No cover available. */ }
+          return { ok: true, preview: { title: title.slice(0, 500), description: typeof desc === 'string' ? desc.slice(0, 700) : '', image } };
+        }
+      } catch { /* Fall back to the public page with the user's site permission. */ }
+      url = new URL(`https://www.bilibili.com/video/${apiUrl.searchParams.get('bvid') ?? `av${apiUrl.searchParams.get('aid')}`}/`);
+    }
     if (!await api.permissions.contains({ origins: [`${url.origin}/*`] })) return { ok: false, needsPermission: true };
     const response = await fetch(url.href, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(8000) });
     const finalUrl = new URL(response.url);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SitePermissionError, requestSiteAccess, YOUTUBE_ORIGINS } from '../sitePermissions';
 import { prepareYouTubePlayer, youtubeEmbedUrl, type YouTubeVideo } from '../youtube';
 
-export function YouTubePlayer({ video, width, height, title }: { video: YouTubeVideo; width: number; height: number; title: string }) {
+export function YouTubePlayer({ video, width, height, title, interactive }: { video: YouTubeVideo; width: number; height: number; title: string; interactive: boolean }) {
   const [prepared, setPrepared] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState('');
   const [needsPermission, setNeedsPermission] = useState(false), [attempt, setAttempt] = useState(0);
   useEffect(() => { const retry = () => { if (needsPermission) setAttempt(n => n + 1); }; window.addEventListener('site-permissions-changed', retry); return () => window.removeEventListener('site-permissions-changed', retry); }, [needsPermission]);
@@ -18,9 +18,9 @@ export function YouTubePlayer({ video, width, height, title }: { video: YouTubeV
   }, [attempt]);
   const playerWidth = Math.max(360, width), playerHeight = playerWidth * 9 / 16;
   const playerScale = Math.min(width / playerWidth, height / playerHeight);
-  return <div className="youtube-player" data-canvas-loading={!ready || undefined} style={{ height }} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
+  return <div className="youtube-player" inert={!interactive} data-canvas-loading={!ready || undefined} style={{ height }} onKeyDown={e => { if (interactive) e.stopPropagation(); }} onWheel={e => { if (interactive) e.stopPropagation(); }}>
     {prepared && !error && <div className="youtube-viewport" style={{ width: playerWidth, height: playerHeight, transform: `translate(-50%, -50%) scale(${playerScale})` }}><iframe src={youtubeEmbedUrl(video)} aria-label={`YouTube: ${title}`} style={{ height: playerHeight }} onLoad={() => { loaded.current = true; setReady(true); }} referrerPolicy="strict-origin-when-cross-origin" allow="encrypted-media; fullscreen; picture-in-picture" allowFullScreen /></div>}
-    {needsPermission && <div className="embed-permission"><p>Firefox needs permission to identify this video player to YouTube.</p><button onClick={() => { void requestSiteAccess(YOUTUBE_ORIGINS).catch(() => setError('Permission could not be granted. Check extension site permissions.')); }}>Allow YouTube playback</button></div>}
+    {needsPermission && <div className="embed-permission"><p>Firefox needs permission to identify this video player to YouTube.</p><button onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()} onClick={() => { void requestSiteAccess(YOUTUBE_ORIGINS).catch(() => setError('Permission could not be granted. Check extension site permissions.')); }}>Allow YouTube playback</button></div>}
     {error && <span role="status">{error}</span>}
   </div>;
 }

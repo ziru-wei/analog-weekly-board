@@ -79,7 +79,7 @@ export function createDocumentStore(initial: BoardDocument) {
     updateItem(id: string, patch: Partial<Pick<BoardItem, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'zIndex' | 'data'>>) {
       const item = document.items[id]; if (!item) return;
       const next = { ...item, ...patch };
-      next.width = clamp(next.width, next.type === 'tape' ? 8 : next.data.type === 'sticky' && !!next.data.variant ? 100 : 150, next.type === 'tape' ? Math.hypot(document.board.width, document.board.height) : document.board.width - 30);
+      next.width = clamp(next.width, next.type === 'tape' ? 8 : next.data.type === 'sticky' && !!next.data.variant ? 50 : 150, next.type === 'tape' ? Math.hypot(document.board.width, document.board.height) : document.board.width - 30);
       next.height = clamp(next.height, next.type === 'tape' ? 20 : next.data.type === 'sticky' && !!next.data.variant ? 26 : next.type === 'website' ? 76 : 110, next.data.type === 'sticky' && next.data.variant === 'vellum' ? document.board.height : document.board.height - 30);
       if (item.type === 'tape' && patch.width !== undefined && patch.rotation === undefined && tapeFits(item, document.board) && !tapeFits(next, document.board)) {
         let low = 0, high = 1;

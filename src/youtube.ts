@@ -45,8 +45,8 @@ export async function prepareYouTubePlayer() {
 
 /** Compact 16:9 viewport, with space for the clipping header. */
 export function videoCardSize(width: number, height = 0) {
-  width = Math.max(400, width);
-  return { width, height: Math.max(height, (width - 32) * 9 / 16 + 90) };
+  width = Math.max(320, width);
+  return { width, height: Math.max(height, (width - 32) * 9 / 16 + 80) };
 }
 
 const titles = new Map<string, Promise<string>>();

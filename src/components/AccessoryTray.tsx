@@ -22,7 +22,13 @@ export function AccessoryTray({ held, onPickUp }: { held: boolean; onPickUp: (ev
   }} onPointerLeave={() => renderer.current?.hover(0, 0)} onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
     <canvas ref={canvas} className="accessory-metal" aria-hidden="true" />
     {!held && <div className="tape-seat" aria-hidden="true" />}
-    <button className={`blue-tape-roll ${held ? 'is-empty' : ''}`} aria-label={held ? 'Return blue painter’s tape' : 'Pick up blue painter’s tape'} onClick={onPickUp}>
+    <button className={`blue-tape-roll ${held ? 'is-empty' : ''}`} aria-label={held ? 'Return blue painter’s tape' : 'Pick up blue painter’s tape'}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.stopPropagation();
+          if (event.repeat) event.preventDefault();
+        }
+      }} onClick={onPickUp}>
       {!held && <TapeRoll />}
     </button>
   </div>;

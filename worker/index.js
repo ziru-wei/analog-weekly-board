@@ -2,6 +2,7 @@
 //   POST /token    { code, code_verifier, redirect_uri }  ->  { access_token, expires_in, refresh_token }
 //   POST /refresh  { refresh_token }                      ->  { access_token, expires_in }
 // Nothing is stored; refresh tokens live only in the user's own browser.
+import { fetchLinkPreview } from './link-preview.js';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 // Only extension redirect URLs may be exchanged (Chrome: *.chromiumapp.org; Firefox: *.extensions.allizom.org, or the
 // http://127.0.0.1/mozoauth2/<hash> form that current Firefox versions return from identity.getRedirectURL()).
@@ -46,6 +47,13 @@ async function google(params, env) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') ?? '';
+    if (new URL(request.url).pathname === '/api/link-preview') {
+      const allowed = (env.PREVIEW_ORIGINS ?? 'https://ziru-wei.github.io').split(',').map(value => value.trim());
+      const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin, Vary: 'Origin', 'Cache-Control': 'no-store' };
+      if (!allowed.includes(origin) && !ORIGIN_OK.test(origin)) return new Response(null, { status: 403 });
+      if (request.method !== 'GET') return new Response(null, { status: 405, headers });
+      return new Response(JSON.stringify(await fetchLinkPreview(new URL(request.url).searchParams.get('url') ?? '')), { headers });
+    }
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
     // Configuration check: lists binding NAMES only (never values) so a missing secret is easy to spot.
     if (request.method === 'GET' && new URL(request.url).pathname === '/health') {

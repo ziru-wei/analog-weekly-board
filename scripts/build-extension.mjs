@@ -12,9 +12,9 @@ const base = {
   action: { default_title: 'Open Analog Weekly Board', default_icon: { 128: 'icons/icon-128.png' } },
   icons: { 128: 'icons/icon-128.png' },
   permissions: ['identity', 'unlimitedStorage', 'declarativeNetRequestWithHostAccess'],
-  host_permissions: ['https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*', 'https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'],
+  host_permissions: ['https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*', 'https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*', 'https://api.bilibili.com/*'],
   optional_host_permissions: ['https://*/*', 'http://*/*'],
-  content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; frame-src https://www.youtube-nocookie.com https://www.instagram.com https://platform.twitter.com https://www.xiaohongshu.com" },
+  content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; frame-src https://www.youtube-nocookie.com https://player.bilibili.com https://www.instagram.com https://platform.twitter.com https://www.xiaohongshu.com https://xhslink.com https://www.xhslink.com" },
 };
 const manifests = {
   // `key` pins Chrome's extension ID, so the Google redirect URI https://<id>.chromiumapp.org/ is the same for every install.

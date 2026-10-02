@@ -1,19 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-export function QuickLabel({ enabled, boardBottom, onCommit }: { enabled: boolean; boardBottom: number; onCommit: (text: string, size: { width: number; height: number }) => void }) {
+import { measureLabel } from '../labelLayout';
+export function QuickLabel({ enabled, boardBottom, onAppear, onCommit }: { enabled: boolean; boardBottom: number; onAppear: () => void; onCommit: (text: string, size: { width: number; height: number }) => void }) {
   const [text, setText] = useState('');
-  const [paperHeight, setPaperHeight] = useState(36);
+  const [paperSize, setPaperSize] = useState({ width: 60, height: 36 });
   const value = useRef('');
-  const update = (text: string) => { value.current = text; setText(text); };
+  const appear = useRef(onAppear); appear.current = onAppear;
+  const update = (text: string) => { if (text && !value.current) appear.current(); value.current = text; setText(text); };
   const input = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
-    const element = input.current;
-    if (!element) return;
-    const measure = () => setPaperHeight(element.getBoundingClientRect().height);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+    let active = true;
+    const measure = () => { if (active) setPaperSize(measureLabel({ type: 'sticky', variant: 'vellum', text, color: '#ffffff88', fontSize: 16 }, { width: Math.max(40, Math.min(240, window.innerWidth - 40)), height: Math.max(36, boardBottom) })); };
+    measure(); void document.fonts.ready.then(measure);
+    document.fonts.addEventListener('loadingdone', measure); window.addEventListener('resize', measure);
+    return () => { active = false; document.fonts.removeEventListener('loadingdone', measure); window.removeEventListener('resize', measure); };
+  }, [text, boardBottom]);
   const commit = () => { const text = value.current; const rect = input.current?.getBoundingClientRect(); update(''); if (text.trim() && rect) onCommit(text, { width: rect.width, height: rect.height }); };
   useEffect(() => {
     if (!enabled) return;
@@ -28,13 +28,13 @@ export function QuickLabel({ enabled, boardBottom, onCommit }: { enabled: boolea
     window.addEventListener('keydown', key); window.addEventListener('pointerup', focus);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('pointerup', focus); };
   }, [enabled]);
-  return <div className={`quick-label ${text && enabled ? 'visible' : ''}`} style={{ height: paperHeight }}>
+  return <div className={`quick-label ${text && enabled ? 'visible' : ''}`} style={{ height: paperSize.height }}>
     <textarea ref={input} data-quick-label aria-label="Type a tracing-paper label" value={text} disabled={!enabled}
       onChange={event => update(event.target.value)} onBlur={commit}
       onKeyDown={event => {
         if (event.nativeEvent.isComposing) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); update(''); }
         if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); commit(); }
-      }} rows={1} style={{ width: 250, maxHeight: Math.max(36, boardBottom) }} />
+      }} rows={1} style={{ width: paperSize.width, height: paperSize.height }} />
   </div>;
 }

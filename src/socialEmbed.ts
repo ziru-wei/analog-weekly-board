@@ -1,4 +1,5 @@
 import { youtubeVideo, videoCardSize } from './youtube';
+import { bilibiliVideo } from './bilibili';
 import type { BoardItem } from './model';
 
 export interface SocialPost { provider: 'instagram' | 'x' | 'xiaohongshu'; label: string; id: string; src: string }
@@ -7,6 +8,10 @@ export function socialPost(value: string): SocialPost | null {
     const url = new URL(value);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.port) return null;
     const host = url.hostname.replace(/^www\./, '');
+    if (host === 'xhslink.com' && /^\/[a-z\d_/-]+\/?$/i.test(url.pathname)) {
+      url.protocol = 'https:';
+      return { provider: 'xiaohongshu', label: '小红书', id: url.pathname, src: url.href };
+    }
     if (host === 'instagram.com') {
       const match = /^\/(p|reel|tv)\/([\w-]+)\/?$/.exec(url.pathname);
       if (match) return { provider: 'instagram', label: 'Instagram', id: match[2], src: `https://www.instagram.com/${match[1]}/${match[2]}/embed/captioned/` };
@@ -15,7 +20,7 @@ export function socialPost(value: string): SocialPost | null {
       const match = /^\/(?:[\w]+\/status|i\/web\/status)\/(\d+)(?:\/(?:photo|video)\/\d+)?\/?$/.exec(url.pathname);
       if (match) return { provider: 'x', label: 'X', id: match[1], src: `https://platform.twitter.com/embed/Tweet.html?id=${match[1]}&dnt=true&theme=light` };
     }
-    if (host === 'xiaohongshu.com') {
+    if (host === 'xiaohongshu.com' || host === 'm.xiaohongshu.com') {
       const match = /^\/(?:explore|discovery\/item)\/([a-f\d]{24})\/?$/i.exec(url.pathname);
       if (match) {
         const src = new URL(`https://www.xiaohongshu.com/explore/${match[1]}`);
@@ -29,13 +34,17 @@ export function socialPost(value: string): SocialPost | null {
 }
 
 export function websiteCardSize(url: string, width?: number, height = 0) {
-  if (youtubeVideo(url)) return videoCardSize(width ?? 400, height);
+  if (youtubeVideo(url) || bilibiliVideo(url)) return videoCardSize(width ?? 320, height);
   if (socialPost(url)) return { width: width ?? 300, height: height || 360 };
   return { width: width ?? 300, height: height || 220 };
 }
 
 export function isCompactWebsiteCard(width: number, height: number) {
   return width < 180 || height < 150;
+}
+
+export function isHorizontalWebsiteCard(width: number, height: number) {
+  return width >= 230 && (height < 150 || width / height >= 2.4);
 }
 
 export function toggleWebsiteCard(item: BoardItem) {

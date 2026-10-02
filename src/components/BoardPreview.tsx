@@ -1,4 +1,5 @@
 import { youtubeVideo } from '../youtube';
+import { bilibiliVideo } from '../bilibili';
 import { socialPost } from '../socialEmbed';
 import { memo, useRef, type CSSProperties } from 'react';
 import { type BoardDocument, type BoardItem, clamp, pinPosition } from '../model';
@@ -18,7 +19,7 @@ function PreviewItem({ item }: { item: BoardItem }) {
   </foreignObject>;
   if (data.type === 'sticky') {
     return <g transform={transform} style={{ filter: shadow }}>
-      <rect x={x} y={y} width={w} height={h} fill={data.color} />
+      <rect x={x} y={y} width={w} height={h} fill={data.variant === 'vellum' ? '#ffffff88' : data.color} />
       <foreignObject x={x} y={y} width={w} height={h}>
         <div className={`${data.variant ? 'small-label' : ''} ${data.variant === 'vellum' ? 'vellum-label' : ''}`} style={{ height: '100%', '--note-pad': `${clamp(w * .06, 9, 18)}px`, '--note-top': `${clamp(h * .09, 14, 25)}px` } as CSSProperties}>
           <div ref={note} className="note-text" style={{ overflow: 'hidden' }}>{data.text}</div>
@@ -34,7 +35,7 @@ function PreviewItem({ item }: { item: BoardItem }) {
       <image href={data.src} x={x + pad.l} y={y + pad.t} width={w - pad.l - pad.r} height={h - pad.t - pad.b} preserveAspectRatio="xMidYMid slice" />
     </g>;
   }
-  if (youtubeVideo(data.url) || socialPost(data.url)) return <SimpleItem item={item} />;
+  if (youtubeVideo(data.url) || bilibiliVideo(data.url) || socialPost(data.url)) return <SimpleItem item={item} />;
   return <g transform={transform} style={{ filter: shadow }}>
     <rect x={x} y={y} width={w} height={h} fill="#f7f6f1" />
     <foreignObject x={x} y={y} width={w} height={h}>
@@ -47,16 +48,17 @@ function PreviewItem({ item }: { item: BoardItem }) {
 
 function SimpleItem({ item }: { item: BoardItem }) {
   const { x, y, width, height, data } = item;
-  const video = data.type === 'website' && youtubeVideo(data.url);
+  const bilibili = data.type === 'website' && bilibiliVideo(data.url);
+  const video = data.type === 'website' && (youtubeVideo(data.url) || bilibili);
   const post = data.type === 'website' && socialPost(data.url);
   const text = data.type === 'sticky' ? data.text : data.type === 'website' ? data.title : '';
   const rows = text.trim() ? Math.min(4, Math.max(1, Math.ceil(text.length / 24)), Math.max(1, Math.floor((height - 20) / 20))) : 0;
   return <g transform={`rotate(${item.rotation} ${x + width / 2} ${y + height / 2})`}>
-    <rect x={x} y={y} width={width} height={height} fill={data.type === 'tape' ? '#3f83b7' : data.type === 'sticky' ? data.color : data.type === 'image' ? '#b0aaa0' : '#f7f6f1'} />
+    <rect x={x} y={y} width={width} height={height} fill={data.type === 'tape' ? '#3f83b7' : data.type === 'sticky' ? data.variant === 'vellum' ? '#ffffff88' : data.color : data.type === 'image' ? '#b0aaa0' : '#f7f6f1'} />
     {data.type === 'image' && <image href={data.src} x={x + 6} y={y + 6} width={Math.max(1, width - 12)} height={Math.max(1, height - 12)} preserveAspectRatio="xMidYMid slice" />}
-    {(video || post) && <g aria-label={video ? 'YouTube video' : `${post && post.label} post`}>
+    {(video || post) && <g aria-label={video ? bilibili ? 'Bilibili video' : 'YouTube video' : `${post && post.label} post`}>
       <rect x={x + 12} y={y + 38} width={width - 24} height={height - 50} rx={3} fill={video ? '#262626' : post && post.provider === 'instagram' ? '#bc5487' : post && post.provider === 'xiaohongshu' ? '#ec4d61' : '#30343a'} />
-      {video ? <g transform={`translate(${x + width / 2} ${y + height / 2 + 10})`}><rect x={-32} y={-22} width={64} height={44} rx={10} fill="#ef3535" /><path d="M-8 -12 L14 0 L-8 12 Z" fill="#fff" /></g>
+      {video ? <g transform={`translate(${x + width / 2} ${y + height / 2 + 10})`}><rect x={-32} y={-22} width={64} height={44} rx={10} fill={bilibili ? '#fb7299' : '#ef3535'} /><path d="M-8 -12 L14 0 L-8 12 Z" fill="#fff" /></g>
         : <text x={x + width / 2} y={y + height / 2} textAnchor="middle" fill="#fff" fontFamily="system-ui, sans-serif" fontSize={36}>{post && post.label}</text>}
     </g>}
     {Array.from({ length: video || post ? 1 : rows }, (_, i) => <rect key={i} x={x + width * .08} y={y + 12 + i * 20} width={width * (i === rows - 1 ? .48 : .8)} height={5} rx={2} fill="#77756f" opacity=".55" />)}

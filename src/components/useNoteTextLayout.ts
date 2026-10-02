@@ -1,5 +1,6 @@
 import { useLayoutEffect, type RefObject } from 'react';
 import { clamp, type BoardItem } from '../model';
+import { labelFontSize } from '../labelLayout';
 
 /** Keep live notes and Dashboard previews sized with the same loaded fonts. */
 export function useNoteTextLayout(item: BoardItem, ref: RefObject<HTMLElement | null>) {
@@ -10,7 +11,7 @@ export function useNoteTextLayout(item: BoardItem, ref: RefObject<HTMLElement | 
     let disposed = false;
     const fit = () => {
       if (disposed) return;
-      if (data.variant) { element.style.fontSize = `${data.fontSize ?? (data.variant === 'vellum' ? 16 : 14)}px`; return; }
+      if (data.variant) { element.style.fontSize = `${labelFontSize(data)}px`; return; }
       let size = clamp(Math.min(width * .08, height * .12), 14, 22);
       element.style.fontSize = `${size}px`;
       while (size > 14 && element.scrollHeight > element.clientHeight + 1) element.style.fontSize = `${--size}px`;

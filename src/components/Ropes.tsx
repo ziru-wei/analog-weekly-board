@@ -48,7 +48,7 @@ function Rope({ a, b, selected, onSelect }: { a: Point; b: Point; selected: bool
     <path d={d} className="rope-shadow" transform="translate(2 7)" />
     <path d={d} className="rope-thread" />
     <path d={d} className="rope-hit" role="button" tabIndex={0} aria-label="Select string"
-      onPointerDown={event => { if (event.button !== 0) return; event.stopPropagation(); select(); }}
+      onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); select(); }}
       onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); select(); } }} />
   </g>;
 }

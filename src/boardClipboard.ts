@@ -14,9 +14,14 @@ export function readBoardClipboard(text: string): { item: BoardItem; pins: Pin[]
     if (!data || data.type !== item.type) return null;
     const strings = (...keys: string[]) => keys.every(key => typeof data[key] === 'string');
     if (data.type === 'sticky') {
-      if (!strings('text', 'color') || (data.variant !== undefined && !['label', 'vellum'].includes(data.variant)) || (data.fontSize !== undefined && (!Number.isFinite(data.fontSize) || data.fontSize <= 0))) return null;
+      if (!strings('text', 'color') || (data.variant !== undefined && !['label', 'vellum'].includes(data.variant)) || (data.fontSize !== undefined && (!Number.isFinite(data.fontSize) || data.fontSize <= 0)) || (data.labelWidth !== undefined && (!Number.isFinite(data.labelWidth) || data.labelWidth <= 0))) return null;
     } else if (data.type === 'website') {
       if (!strings('url', 'title', 'domain', 'description') || !/^https?:\/\//i.test(data.url) || (data.image !== undefined && typeof data.image !== 'string')) return null;
+      if (data.media !== undefined) {
+        const web = (value: unknown) => { try { const url = new URL(String(value)); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password; } catch { return false; } };
+        if (!data.media || !Array.isArray(data.media.images) || data.media.images.length > 20 || !data.media.images.every(web)) return null;
+        if (data.media.video && (!web(data.media.video.url) || !Number.isFinite(data.media.video.width) || data.media.video.width <= 0 || !Number.isFinite(data.media.video.height) || data.media.video.height <= 0)) return null;
+      }
       if (data.expandedSize && (!Number.isFinite(data.expandedSize.width) || !Number.isFinite(data.expandedSize.height))) return null;
     } else if (data.type === 'image') {
       if (!strings('src', 'alt') || !Number.isFinite(data.aspectRatio) || data.aspectRatio <= 0 || !['white', 'black', 'worn'].includes(data.frame) || (data.caption !== undefined && typeof data.caption !== 'string')) return null;

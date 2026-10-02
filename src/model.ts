@@ -1,8 +1,8 @@
 export type ItemData =
   | { type: 'tape' }
-  | { type: 'sticky'; text: string; color: string; fontSize?: number; variant?: 'label' | 'vellum' }
+  | { type: 'sticky'; text: string; color: string; fontSize?: number; variant?: 'label' | 'vellum'; labelWidth?: number }
   | { type: 'image'; src: string; alt: string; aspectRatio: number; frame: 'white' | 'black' | 'worn'; caption?: string; sourceAspect?: number; crop?: { x: number; y: number; w: number; h: number } }
-  | { type: 'website'; url: string; title: string; domain: string; description: string; image?: string; compact?: boolean; expandedSize?: { width: number; height: number } };
+  | { type: 'website'; url: string; title: string; domain: string; description: string; image?: string; media?: { images: string[]; video?: { url: string; width: number; height: number } }; compact?: boolean; expandedSize?: { width: number; height: number } };
 export interface BoardItem {
   id: string; type: ItemData['type']; x: number; y: number; width: number; height: number;
   rotation: number; zIndex: number; data: ItemData; pins: string[];
@@ -29,6 +29,26 @@ export function pinPosition(pin: Pin, item?: BoardItem): Point {
   const a = item.rotation * Math.PI / 180;
   const dx = (pin.xRatio - .5) * item.width, dy = (pin.yRatio - .5) * item.height;
   return { x: item.x + item.width / 2 + dx * Math.cos(a) - dy * Math.sin(a), y: item.y + item.height / 2 + dx * Math.sin(a) + dy * Math.cos(a) };
+}
+/** Snap beyond the pin halo; retain a highlighted target through small release jitter. */
+export function pinConnectionTarget(document: BoardDocument, fromPinId: string, point: Point, scale: number, currentTarget?: string) {
+  const zoom = Math.max(scale, .01);
+  const radius = Math.max(25, 20 + 10 / zoom);
+  const held = currentTarget && currentTarget !== fromPinId ? document.pins[currentTarget] : undefined;
+  if (held) {
+    const position = pinPosition(held, held.itemId ? document.items[held.itemId] : undefined);
+    if (Math.hypot(point.x - position.x, point.y - position.y) <= radius + 6 / zoom) {
+      return { id: held.id, position };
+    }
+  }
+  let target: { id: string; position: Point } | null = null, closest = radius;
+  for (const pin of Object.values(document.pins)) {
+    if (pin.id === fromPinId) continue;
+    const position = pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined);
+    const distance = Math.hypot(point.x - position.x, point.y - position.y);
+    if (distance <= closest) { target = { id: pin.id, position }; closest = distance; }
+  }
+  return target;
 }
 export function localPoint(point: Point, item: BoardItem): Point {
   const a = -item.rotation * Math.PI / 180;

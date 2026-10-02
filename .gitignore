@@ -14,3 +14,9 @@ release/
 *.pem
 web-ext-artifacts/
 developer_reminder.md
+
+# local tests and generated test reports
+/tests/
+/coverage/
+/test-results/
+/playwright-report/

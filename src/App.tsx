@@ -1,16 +1,21 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { BOARD_CLIPBOARD_TYPE, encodeBoardGroup, readBoardGroup } from './boardClipboard';
-import { toggleLabel } from './labelLayout';
+import { measureLabel, toggleLabel } from './labelLayout';
 import { youtubeVideo } from './youtube';
+import { bilibiliVideo } from './bilibili';
 import { socialPost, websiteCardSize, toggleWebsiteCard } from './socialEmbed';
+import { websitePaste } from './websitePaste';
 import { useCanvasReady } from './useCanvasReady';
+import { useBoardView } from './useBoardView';
+import { useBoardSound } from './useBoardSound';
+import { boardCenter, wheelPixels } from './boardView';
 import { SyncStatus } from './components/SyncStatus';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
 import { type WeekState, acknowledgeUpload, archiveOf, newRev, rollover, saveWeekState } from './weeks';
 import { writeCurrent } from './storage';
 import { cloud, useCloud } from './cloud/sync';
-import { type BoardItem, type Pin as PinModel, type Point, clamp, localPoint, photoMargins, pinPosition } from './model';
+import { type BoardItem, type Pin as PinModel, type Point, clamp, localPoint, photoMargins, pinPosition, pinConnectionTarget } from './model';
 import { createDocumentStore, useDocument } from './store';
 import { renderCork } from './texture';
 import { QuickLabel } from './components/QuickLabel';
@@ -36,18 +41,19 @@ let store: ReturnType<typeof createDocumentStore>;
 let commands: ReturnType<typeof createDocumentStore>['commands'];
 /** Called once from main.tsx, after the saved week state has been read from IndexedDB. */
 export function initApp(week: WeekState) { initialWeek = week; store = createDocumentStore(week.current.doc); commands = store.commands; }
-const HOLD_MS = 480, MAX_ZOOM = 2.5;
+const HOLD_MS = 480;
 type Selection = { type: 'item' | 'pin' | 'rope'; id: string; ids?: string[] } | null;
 type Gesture =
   | { kind: 'drag' | 'resize'; start: Point; item: BoardItem; moved: boolean; side?: 'left' | 'right'; duplicate?: boolean; items?: BoardItem[] }
-  | { kind: 'pin'; start: Point; pin: PinModel; mode: 'pending' | 'connect' | 'move'; moved: boolean }
-  | { kind: 'tape'; start: Point; end: Point; moved: boolean }
+  | { kind: 'pin'; start: Point; pin: PinModel; mode: 'pending' | 'connect' | 'move'; moved: boolean; target?: string }
+  | { kind: 'tape'; start: Point; end: Point; moved: boolean; sounded?: boolean }
   | { kind: 'pin-supply'; start: Point; color: string; moved: boolean }
   | { kind: 'supply'; start: Point; color: string; item?: BoardItem; moved: boolean }
   | { kind: 'pan'; start: Point; pan: Point; moved: boolean };
 type Palette = { type: 'pin' | 'paper'; id: string } | null;
 export default function App() {
   const document = useDocument(store);
+  const { sound, enabled: soundEnabled, toggle: toggleSound } = useBoardSound();
   const canvasReady = useCanvasReady();
   const viewport = useRef<HTMLDivElement>(null), board = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const gesture = useRef<Gesture | null>(null), holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,26 +148,25 @@ export default function App() {
   const [pinPreview, setPinPreview] = useState<{ position: Point; color: string } | null>(null);
   const [pinDropTarget, setPinDropTarget] = useState<string | null>(null);
   const [movingPin, setMovingPin] = useState<string | null>(null);
-  const [temporary, setTemporary] = useState<{ from: string; to: Point } | null>(null);
+  const [temporary, setTemporary] = useState<{ from: string; to: Point; target?: string } | null>(null);
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-  const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
+  const { view, scale, pan, panning, setPan, onPan, onZoom, stopZoom, startPinch, changePinch, endPinch } = useBoardView(size);
+  const center = boardCenter(size);
   const [stackColor, setStackColor] = useState(() => PAPER_COLORS[Math.floor(Math.random() * PAPER_COLORS.length)]);
   const [notice, setNotice] = useState('');
   const [activeGesture, setActiveGesture] = useState(false);
-  const scale = Math.min((size.width - 32) / 1600, (size.height - 112) / 1000) * view.zoom;
-  const constrainPan = (x: number, y: number, nextScale = scale) => ({ x: clamp(x, -Math.max(0, (1600 * nextScale - size.width + 32) / 2), Math.max(0, (1600 * nextScale - size.width + 32) / 2)), y: clamp(y, -Math.max(0, (1000 * nextScale - size.height + 32) / 2), Math.max(0, (1000 * nextScale - size.height + 32) / 2)) });
-  const pan = constrainPan(view.x, view.y);
   useLayoutEffect(() => {
     const clip = window.document.querySelector('.note-stack-clip img');
     const update = () => {
       if (!clip || !board.current) return;
       const r = clip.getBoundingClientRect(), b = board.current.getBoundingClientRect();
-      commands.setClipBounds({ left: (r.left - b.left) / scale, right: (r.right - b.left) / scale, top: (r.top - b.top) / scale, bottom: (r.bottom - b.top) / scale });
+      const boardScale = b.width / 1600;
+      commands.setClipBounds({ left: (r.left - b.left) / boardScale, right: (r.right - b.left) / boardScale, top: (r.top - b.top) / boardScale, bottom: (r.bottom - b.top) / boardScale });
     };
     update(); const observer = new ResizeObserver(update); if (clip) observer.observe(clip);
     return () => observer.disconnect();
-  }, [scale, pan.x, pan.y]);
-  const lightingCenter = { x: 800 - pan.x / scale, y: 500 + (40 - pan.y) / scale };
+  }, []);
+  const lightingCenter = { x: 800 - pan.x / scale, y: 500 + (size.height / 2 - center.y - pan.y) / scale };
   useEffect(() => { if (canvas.current) renderCork(canvas.current); }, []);
   useEffect(() => {
     const element = viewport.current; if (!element) return;
@@ -176,8 +181,12 @@ export default function App() {
     if (target?.element.hasPointerCapture(target.pointerId)) target.element.releasePointerCapture(target.pointerId);
   };
   const clearGesture = () => { clearHold(); gesture.current = null; setPinDropTarget(null); setPinPreview(null); setTapePreview(null); setTemporary(null); setMovingPin(null); setActiveGesture(false); releaseCapture(); };
+  const connectPins = (from: string, to: string, cue: 'tie' | 'pin' = 'tie') => {
+    commands.createConnection(from, to);
+    sound.play(cue);
+  };
   const finishEdit = () => { if (editing) commands.finishTransaction(); setEditing(null); };
-  const cancelGesture = () => { const g = gesture.current; if (g?.kind === 'pan') setView(current => ({ ...current, ...g.pan })); commands.cancelTransaction(); clearGesture(); setPalette(null); };
+  const cancelGesture = () => { const g = gesture.current; if (g?.kind === 'pan') setPan(g.pan); commands.cancelTransaction(); clearGesture(); setPalette(null); };
   const travelHistory = (redo: boolean) => { finishEdit(); cancelGesture(); if (redo) commands.redo(); else commands.undo(); setSelection(null); };
   const removeSelection = () => {
     if (!selection) return;
@@ -192,8 +201,8 @@ export default function App() {
   const itemAt = (event: { clientX: number; clientY: number }) => window.document.elementsFromPoint(event.clientX, event.clientY)
     .map(element => element.closest<HTMLElement>('[data-item-id]')?.dataset.itemId).find(Boolean);
   const capture = (event: ReactPointerEvent, stable = false) => {
-    // Pins change DOM order when their attachment changes. Capture on the stable
-    // workspace so reordering a pin cannot cancel and roll back its drag.
+    // Pins can change DOM order, and active embeds become inert during dragging.
+    // Capture on the workspace so those changes cannot interrupt the gesture.
     const element = stable ? viewport.current! : event.currentTarget;
     element.setPointerCapture(event.pointerId); captureTarget.current = { element, pointerId: event.pointerId }; setActiveGesture(true);
   };
@@ -204,22 +213,24 @@ export default function App() {
   const startEdit = (id: string) => { finishEdit(); commands.beginTransaction(); selectItem(id); setEditing(id); setPalette(null); };
   const itemDown = (event: ReactPointerEvent, item: BoardItem) => {
     if (event.button !== 0 || editing === item.id) return;
-    event.stopPropagation(); finishEdit(); setPalette(null);
+    event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null);
     const currentIds = selection?.type === 'item' ? selection.ids ?? [selection.id] : [];
     if (event.shiftKey) {
       const ids = currentIds.includes(item.id) ? currentIds.filter(id => id !== item.id) : [...currentIds, item.id];
+      if (ids.includes(item.id)) { commands.beginTransaction(); commands.updateItem(item.id, { zIndex: Math.max(0, ...Object.values(store.getSnapshot().items).map(target => target.zIndex)) + 1 }); commands.finishTransaction(false); }
       setSelection(ids.length ? { type: 'item', id: ids[ids.length - 1], ids } : null); return;
     }
     commands.beginTransaction();
     const ids = currentIds.includes(item.id) ? currentIds : [item.id];
     setSelection({ type: 'item', id: item.id, ids });
+    commands.updateItem(item.id, { zIndex: Math.max(0, ...Object.values(store.getSnapshot().items).map(target => target.zIndex)) + 1 });
     const items = ids.map(id => store.getSnapshot().items[id]).filter(Boolean);
-    gesture.current = { kind: 'drag', start: point(event), item, items, moved: false, duplicate: event.altKey }; capture(event);
+    gesture.current = { kind: 'drag', start: point(event), item, items, moved: false, duplicate: event.altKey }; capture(event, item.data.type === 'website');
   };
   const resizeDown = (event: ReactPointerEvent, item: BoardItem, side?: 'left' | 'right') => {
     if (event.button !== 0) return;
     event.preventDefault(); event.stopPropagation(); commands.beginTransaction();
-    gesture.current = { kind: 'resize', start: point(event), item, side, moved: false }; capture(event);
+    gesture.current = { kind: 'resize', start: point(event), item, side, moved: false }; capture(event, item.data.type === 'website');
   };
   const pinDown = (event: ReactPointerEvent, pin: PinModel) => {
     if (event.button !== 0 || gesture.current) return;
@@ -244,12 +255,13 @@ export default function App() {
       const p = point(event);
       g.end = { x: clamp(p.x, TAPE_WIDTH / 2, 1600 - TAPE_WIDTH / 2), y: clamp(p.y, TAPE_WIDTH / 2, 1000 - TAPE_WIDTH / 2) };
       g.moved = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y) > 8;
+      if (g.moved && !g.sounded) { sound.play('tape'); g.sounded = true; }
       setTapePreview({ start: g.start, end: g.end }); return;
     }
     if (g.kind === 'pan') {
       const dx = event.clientX - g.start.x, dy = event.clientY - g.start.y;
       if (Math.hypot(dx, dy) > 5) g.moved = true;
-      setView(current => ({ ...current, ...constrainPan(g.pan.x + dx, g.pan.y + dy) })); return;
+      setPan({ x: g.pan.x + dx, y: g.pan.y + dy }); return;
     }
     const p = point(event), dx = p.x - g.start.x, dy = p.y - g.start.y;
     if (Math.hypot(dx, dy) * scale > 5) g.moved = true;
@@ -261,12 +273,14 @@ export default function App() {
       const ids = commands.duplicateItems(sources, Object.values(snapshot.pins), snapshot.connections, { x: 0, y: 0 });
       g.items = ids.map(id => store.getSnapshot().items[id]);
       g.item = g.items[0]; g.duplicate = false;
+      sound.play('paper');
       setSelection({ type: 'item', id: ids[0], ids });
     }
     if (g.kind === 'supply') {
       if (!g.item) {
         const id = commands.createItem({ type: 'sticky', text: '', color: g.color }, NOTE_STACK_POSITION);
         g.item = store.getSnapshot().items[id]; setSelection({ type: 'item', id });
+        sound.play('paper');
       }
       commands.updateItem(g.item.id, { x: NOTE_STACK_POSITION.x + dx, y: NOTE_STACK_POSITION.y + dy });
     } else if (g.kind === 'drag') { commands.moveItems(g.items ?? [g.item], { x: dx, y: dy }); }
@@ -283,19 +297,29 @@ export default function App() {
         return;
       }
       const label = g.item.data.type === 'sticky' && !!g.item.data.variant;
-      let width = clamp(g.item.width + dx * Math.cos(angle) + dy * Math.sin(angle), label ? 100 : 150, 1550);
+      let width = clamp(g.item.width + dx * Math.cos(angle) + dy * Math.sin(angle), label ? 50 : 150, 1550);
       let height = clamp(g.item.height - dx * Math.sin(angle) + dy * Math.cos(angle), label ? 26 : 110, 950);
       if (g.item.data.type === 'image' && !event.shiftKey) { const { x: edgeX, y: edgeY } = photoMargins(g.item.data.frame); width = Math.min(width, (950 - edgeY) * g.item.data.aspectRatio + edgeX); height = (width - edgeX) / g.item.data.aspectRatio + edgeY; }
       if (g.item.data.type === 'website') { width = Math.max(150, width); height = Math.max(76, g.item.height - dx * Math.sin(angle) + dy * Math.cos(angle)); }
-      commands.updateItem(g.item.id, { width, height });
+      if (g.item.data.type === 'sticky' && label) {
+        const data = { ...g.item.data, labelWidth: width };
+        commands.updateItem(g.item.id, { width, height: Math.max(height, measureLabel(data, document.board).height), data });
+      } else commands.updateItem(g.item.id, { width, height });
     } else if (g.kind === 'pin') {
       setPalette(null);
-      if (g.mode === 'pending') g.mode = 'connect';
+      if (g.mode === 'pending') {
+        g.mode = 'connect';
+      }
       if (g.mode === 'move') {
         const target = itemAt(event);
         setPinDropTarget(target ?? null);
         commands.movePin(g.pin.id, p, target);
-      } else setTemporary({ from: g.pin.id, to: p });
+      } else {
+        const target = pinConnectionTarget(store.getSnapshot(), g.pin.id, p, scale, g.target);
+        if (target && target.id !== g.target) sound.play('snap');
+        g.target = target?.id;
+        setTemporary({ from: g.pin.id, to: target?.position ?? p, target: target?.id });
+      }
     }
   };
   const pointerUp = (event: ReactPointerEvent) => {
@@ -304,6 +328,7 @@ export default function App() {
       const p = point(event);
       if (g.moved && p.x >= 0 && p.y >= 0 && p.x <= 1600 && p.y <= 1000) {
         const id = commands.placePin(p, g.color, itemAt(event)); setSelection({ type: 'pin', id }); commands.finishTransaction();
+        sound.play('pin');
       } else commands.cancelTransaction();
       clearGesture(); return;
     }
@@ -311,6 +336,7 @@ export default function App() {
       if (g.moved) {
         const length = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
         commands.createItem({ type: 'tape' }, { x: (g.start.x + g.end.x) / 2 - length / 2, y: (g.start.y + g.end.y) / 2 - TAPE_WIDTH / 2 }, { width: length, height: TAPE_WIDTH }, Math.atan2(g.end.y - g.start.y, g.end.x - g.start.x) * 180 / Math.PI);
+        sound.play('tear');
       }
       commands.finishTransaction(g.moved); clearGesture(); return;
     }
@@ -320,20 +346,21 @@ export default function App() {
       const colors = PAPER_COLORS.filter(color => color !== g.color);
       setStackColor(colors[Math.floor(Math.random() * colors.length)]);
     }
-    if (g.kind === 'pin' && g.mode === 'move' && g.moved) commands.movePin(g.pin.id, point(event), itemAt(event));
+    if (g.kind === 'pin' && g.mode === 'move' && g.moved) { commands.movePin(g.pin.id, point(event), itemAt(event)); sound.play('pin'); }
     if (g.kind === 'pin' && g.mode === 'connect' && g.moved) {
-      const hit = window.document.elementFromPoint(event.clientX, event.clientY);
-      const target = hit?.closest<HTMLElement>('[data-pin-id]')?.dataset.pinId;
-      if (target) commands.createConnection(g.pin.id, target);
+      const target = pinConnectionTarget(store.getSnapshot(), g.pin.id, point(event), scale, g.target);
+      if (target) connectPins(g.pin.id, target.id);
+      else { sound.play('retract'); }
     }
     if (g.kind === 'drag' && (g.items?.length ?? 1) === 1 && !g.duplicate && !g.moved && g.item.data.type === 'website') {
       const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest('a');
       if (target) window.open(g.item.data.url, '_blank', 'noopener,noreferrer');
     }
+    if (g.moved && (g.kind === 'drag' || g.kind === 'supply')) sound.play('place');
     commands.finishTransaction(g.moved); clearGesture();
   };
   const addNote = (p: Point) => {
-    finishEdit(); const id = commands.createItem({ type: 'sticky', text: '', color: '#202120', variant: 'label' }, { x: p.x - 90, y: p.y - 14 }, { width: 180, height: 28 }); startEdit(id);
+    finishEdit(); const id = commands.createItem({ type: 'sticky', text: '', color: '#202120', variant: 'label' }, { x: p.x - 90, y: p.y - 14 }, { width: 180, height: 28 }); startEdit(id); sound.play('label');
   };
   const pasteCenter = () => point({ clientX: size.width / 2, clientY: size.height / 2 });
   const pasteImages = async (files: File[]) => {
@@ -346,10 +373,12 @@ export default function App() {
         const width = Math.max(150, Math.min(440, 700 * aspectRatio)), height = Math.max(110, Math.min(950, width / aspectRatio));
         const p = pasteCenter();
         const id = commands.createItem({ type: 'image', src, alt: file.name || 'Pasted photograph', aspectRatio, frame: 'worn', caption: '' }, { x: p.x - width / 2 + index * 20, y: p.y - height / 2 + index * 20 }, { width, height });
+        sound.play('paper');
         setSelection({ type: 'item', id });
       } catch { URL.revokeObjectURL(blobUrl); setNotice('This image could not be pasted. Try a PNG, JPG, or WebP.'); }
     }
   };
+
   useEffect(() => {
     const onCopy = (event: ClipboardEvent) => {
       if (dashboardRef.current || editing || gesture.current || selection?.type !== 'item' || !event.clipboardData) return;
@@ -373,17 +402,20 @@ export default function App() {
       if (copied) {
         event.preventDefault(); finishEdit();
         const ids = commands.duplicateItems(copied.items, copied.pins, copied.connections);
+        sound.play('paper');
         setSelection({ type: 'item', id: ids[0], ids }); return;
       }
       const files = Array.from(event.clipboardData?.items ?? []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file);
       if (files.length) { event.preventDefault(); finishEdit(); void pasteImages(files); return; }
       const text = event.clipboardData?.getData('text/plain').trim(); if (!text) return;
       try {
-        const url = new URL(text); if (!['http:', 'https:'].includes(url.protocol)) return;
+        const pasted = websitePaste(text); if (!pasted) return;
+        const url = new URL(pasted.url);
         event.preventDefault(); finishEdit(); const p = pasteCenter(), domain = url.hostname.replace(/^www\./, '');
         const video = youtubeVideo(url.href);
         const { width, height } = websiteCardSize(url.href);
-        const id = commands.createItem({ type: 'website', url: url.href, domain, title: video ? 'YouTube video' : socialPost(url.href)?.label ?? domain, description: '' }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
+        const id = commands.createItem({ type: 'website', url: url.href, domain, title: pasted.title || (video ? 'YouTube video' : bilibiliVideo(url.href) ? 'Bilibili video' : socialPost(url.href)?.label ?? domain), description: '' }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
+        sound.play('paper');
       } catch { /* Plain text stays in the clipboard until a note is being edited. */ }
     };
     const onKey = (event: KeyboardEvent) => {
@@ -395,8 +427,9 @@ export default function App() {
         const cursor = { clientX: pointer.current.x, clientY: pointer.current.y };
         const p = point(cursor), bounds = store.getSnapshot().board;
         if (p.x < 0 || p.y < 0 || p.x > bounds.width || p.y > bounds.height) return;
-        const id = commands.placePin(p, g.pin.color, itemAt(cursor));
-        commands.createConnection(g.pin.id, id);
+        const target = pinConnectionTarget(store.getSnapshot(), g.pin.id, p, scale, g.target);
+        const id = target?.id ?? commands.placePin(p, g.pin.color, itemAt(cursor));
+        connectPins(g.pin.id, id, target ? 'tie' : 'pin');
         commands.finishTransaction();
         clearGesture();
         setSelection({ type: 'pin', id });
@@ -406,7 +439,7 @@ export default function App() {
       const selected = selection?.type === 'item' && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
       if (selected?.data.type === 'sticky' && selected.data.variant && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
-        if (!event.repeat) { const patch = toggleLabel(selected); if (patch) commands.updateItem(selected.id, patch); }
+        if (!event.repeat) { const patch = toggleLabel(selected); if (patch) { commands.updateItem(selected.id, patch); if (patch.data?.type === 'sticky' && patch.data.variant === 'label') sound.play('label'); } }
         return;
       }
       if (selected?.data.type === 'website' && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
@@ -419,27 +452,69 @@ export default function App() {
         if (event.code === 'Space') { event.preventDefault(); if (!event.repeat) openLightbox(selected); return; }
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); travelHistory(event.shiftKey); }
-      if (event.key === 'Escape') { setTapeHeld(false); cancelGesture(); setPalette(null); setSelection(null); }
+      if (event.key === 'Escape') { if (g?.kind === 'pin' && g.mode === 'connect' && g.moved) { sound.play('retract'); } setTapeHeld(false); cancelGesture(); setPalette(null); setSelection(null); }
       if ((event.key === 'Delete' || event.key === 'Backspace') && !gesture.current) { event.preventDefault(); removeSelection(); }
     };
+    // A focused rope or button must not consume Space while a pin is being connected.
+    const onGestureKey = (event: KeyboardEvent) => {
+      const g = gesture.current;
+      if (event.code === 'Space' && g?.kind === 'pin' && g.mode === 'connect' && g.moved) { onKey(event); event.stopPropagation(); }
+    };
     const onBlur = () => { if (gesture.current) cancelGesture(); };
+    window.addEventListener('keydown', onGestureKey, true);
     window.addEventListener('copy', onCopy); window.addEventListener('paste', onPaste); window.addEventListener('keydown', onKey); window.addEventListener('blur', onBlur);
-    return () => { window.removeEventListener('copy', onCopy); window.removeEventListener('paste', onPaste); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); };
+    return () => { window.removeEventListener('keydown', onGestureKey, true); window.removeEventListener('copy', onCopy); window.removeEventListener('paste', onPaste); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); };
   });
   useEffect(() => {
     const element = viewport.current; if (!element) return;
+    // Safari exposes native GestureEvents; suppress wheel duplicates while one
+    // of those gestures is active. Chromium and Firefox use Ctrl-wheel.
+    let nativePinch = false;
+    type NativeGesture = Event & { scale: number; clientX: number; clientY: number };
+    const cursor = (event: { clientX: number; clientY: number }) => {
+      const rect = element.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
     const onWheel = (event: WheelEvent) => {
-      if ((event.target as HTMLElement).closest('textarea, input')) return;
-      event.preventDefault(); if (gesture.current) return;
-      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? size.height : 1);
-      const nextZoom = clamp(view.zoom * Math.exp(-delta * .002), 1, MAX_ZOOM);
-      const nextScale = scale * nextZoom / view.zoom;
-      const p = point(event);
-      setView({ zoom: nextZoom, ...constrainPan(event.clientX - size.width / 2 - (p.x - 800) * nextScale, event.clientY - size.height / 2 + 40 - (p.y - 500) * nextScale, nextScale) });
+      if (!event.ctrlKey && !event.metaKey && (event.target as Element).closest('textarea, input')) return;
+      if ((event.target as Element).closest('.youtube-player:not([inert]), .bilibili-player:not([inert]), .social-embed:not([inert])')) return;
+      event.preventDefault(); if (gesture.current || nativePinch) return;
+      if (event.ctrlKey || event.metaKey) {
+        onZoom(wheelPixels(event.deltaY, event.deltaMode, element.clientHeight), cursor(event), event.ctrlKey ? 'pinch' : 'wheel');
+      } else {
+        const x = wheelPixels(event.deltaX, event.deltaMode, element.clientWidth);
+        const y = wheelPixels(event.deltaY, event.deltaMode, element.clientHeight);
+        onPan(event.shiftKey && !x ? { x: y, y: 0 } : { x, y });
+      }
       setPalette(null);
     };
-    element.addEventListener('wheel', onWheel, { passive: false }); return () => element.removeEventListener('wheel', onWheel);
-  });
+    const onGestureStart = (event: Event) => {
+      event.preventDefault(); if (gesture.current) return;
+      nativePinch = true;
+      startPinch(cursor(event as NativeGesture));
+      setPalette(null);
+    };
+    const onGestureChange = (event: Event) => {
+      event.preventDefault(); if (!nativePinch || gesture.current) return;
+      const native = event as NativeGesture;
+      changePinch(native.scale, cursor(native));
+    };
+    const onGestureEnd = (event: Event) => {
+      onGestureChange(event);
+      nativePinch = false;
+      endPinch();
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    element.addEventListener('gesturestart', onGestureStart, { passive: false });
+    element.addEventListener('gesturechange', onGestureChange, { passive: false });
+    element.addEventListener('gestureend', onGestureEnd, { passive: false });
+    return () => {
+      element.removeEventListener('wheel', onWheel);
+      element.removeEventListener('gesturestart', onGestureStart);
+      element.removeEventListener('gesturechange', onGestureChange);
+      element.removeEventListener('gestureend', onGestureEnd);
+    };
+  }, [onPan, onZoom, startPinch, changePinch, endPinch]);
   const palettePin = palette?.type === 'pin' ? document.pins[palette.id] : null;
   const paletteItem = palette?.type === 'paper' ? document.items[palette.id] : null;
   const palettePoint = palettePin ? pinPosition(palettePin, palettePin.itemId ? document.items[palettePin.itemId] : undefined) : paletteItem ? { x: paletteItem.x + paletteItem.width / 2, y: paletteItem.y + paletteItem.height } : null;
@@ -450,29 +525,44 @@ export default function App() {
     transformOrigin: '0 50%', transform: `rotate(${Math.atan2(tapePreview.end.y - tapePreview.start.y, tapePreview.end.x - tapePreview.start.x) * 180 / Math.PI}deg)`,
   } : undefined;
   const renderItem = (item: BoardItem) => <Item key={item.id} item={item} pinTarget={pinDropTarget === item.id} selected={selection?.type === 'item' && (selection.ids ?? [selection.id]).includes(item.id)} editing={editing === item.id}
-            onAddPin={(event, target) => { finishEdit(); const p = localPoint(point(event), target); commands.createPin(target.id, p.x / target.width, p.y / target.height); }}
+            webInteractive={selection?.type === 'item' && selection.id === item.id && (selection.ids?.length ?? 1) === 1 && !activeGesture && !panning}
+            onAddPin={(event, target) => { finishEdit(); const p = localPoint(point(event), target); commands.createPin(target.id, p.x / target.width, p.y / target.height); sound.play('pin'); }}
             cropping={cropping === item.id} boardScale={scale} onCropCancel={() => setCropping(null)}
             onCropApply={patch => { commands.beginTransaction(); commands.updateItem(item.id, patch); commands.finishTransaction(); setCropping(null); }}
             onCrop={() => { finishEdit(); setSelection({ type: 'item', id: item.id }); setCropping(item.id); }}
             onPointerDown={itemDown} onResize={resizeDown} onEdit={() => startEdit(item.id)} onFinishEdit={finishEdit}
-            onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); if (target.data.type === 'sticky') setPalette({ type: 'paper', id: target.id }); }}
-            onText={text => { if (item.data.type === 'sticky') commands.updateItem(item.id, { data: { ...item.data, text } }); else if (item.data.type === 'image') commands.updateItem(item.id, { data: { ...item.data, caption: text } }); else if (item.data.type === 'website') commands.updateItem(item.id, { data: { ...item.data, title: text } }); }} />;
+            onWebsiteMinHeight={height => { if (gesture.current?.kind === 'resize') return; const current = store.getSnapshot().items[item.id]; const needed = Math.min(970, Math.ceil(height)); if (current && needed > current.height) commands.updateItem(item.id, { height: needed }); }}
+            onWebsitePreview={preview => {
+              const current = store.getSnapshot().items[item.id]; if (current?.data.type !== 'website') return;
+              const data = current.data;
+              const automatic = !data.title || data.title === data.domain || ['YouTube video', 'Bilibili video', socialPost(data.url)?.label].includes(data.title);
+              const next = { ...data, title: automatic && preview.title ? preview.title : data.title, description: preview.media ? preview.description : data.description || preview.description, image: preview.media ? preview.image : data.image || preview.image, media: preview.media ?? data.media };
+              if (next.title !== data.title || next.description !== data.description || next.image !== data.image || JSON.stringify(next.media) !== JSON.stringify(data.media)) commands.updateItem(item.id, { data: next });
+            }}
+            onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); setPalette(target.data.type === 'sticky' && !target.data.variant ? { type: 'paper', id: target.id } : null); }}
+            onText={text => { if (item.data.type === 'sticky') { const data = { ...item.data, text }; commands.updateItem(item.id, { data, ...(data.variant ? measureLabel(data, document.board) : {}) }); } else if (item.data.type === 'image') commands.updateItem(item.id, { data: { ...item.data, caption: text } }); else if (item.data.type === 'website') commands.updateItem(item.id, { data: { ...item.data, title: text } }); }} />;
+  const hintItem = selection?.type === 'item' ? document.items[selection.id] : undefined;
   return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''} ${canvasReady ? '' : 'canvas-loading'}`} aria-busy={!canvasReady}>
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
-    <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Scroll to zoom; drag empty cork to pan."
+    <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
       onPointerDownCapture={event => {
+        stopZoom();
         if (!tapeHeld || event.button !== 0 || (event.target as Element).closest('.accessory-tray')) return;
         const p = point(event); if (p.x < 0 || p.x > 1600 || p.y < 0 || p.y > 1000) return;
         event.preventDefault(); event.stopPropagation(); finishEdit(); setSelection(null); commands.beginTransaction();
         const start = { x: clamp(p.x, TAPE_WIDTH / 2, 1600 - TAPE_WIDTH / 2), y: clamp(p.y, TAPE_WIDTH / 2, 1000 - TAPE_WIDTH / 2) };
         gesture.current = { kind: 'tape', start, end: start, moved: false }; capture(event);
       }}
-      onPointerDown={event => { if (event.target === event.currentTarget) { finishEdit(); setSelection(null); setPalette(null); } }}
+      onPointerDown={event => {
+        if (event.button !== 0 || event.target !== event.currentTarget) return;
+        finishEdit(); setSelection(null); setPalette(null);
+        if (view.zoom > 1 && !tapeHeld) { gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan, moved: false }; capture(event); }
+      }}
       onDoubleClickCapture={event => { if (tapeHeld) { event.preventDefault(); event.stopPropagation(); } }}
       onDragOver={event => event.preventDefault()} onDrop={event => event.preventDefault()}
       onPointerMove={event => { if (tapeHeld) setTapeCursor({ x: event.clientX, y: event.clientY }); pointerMove(event); }} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event => { const captured = captureTarget.current; if (gesture.current && captured?.element === event.target && captured.pointerId === event.pointerId) cancelGesture(); }}>
-      <div className="board-size" style={{ width: 1600 * scale, height: 1000 * scale, left: size.width / 2 + pan.x, top: size.height / 2 - 40 + pan.y }}>
-        <div ref={board} className={`board ${activeGesture ? 'interacting' : ''} ${temporary ? 'connecting' : ''}`} style={{ transform: `scale(${scale})` }}
+      <div className="board-size" style={{ top: center.y, transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})` }}>
+        <div ref={board} className={`board ${activeGesture ? 'interacting' : ''} ${temporary ? 'connecting' : ''}`}
           onPointerDown={event => {
             if (event.button !== 0 || !isBlank(event.target)) return;
             finishEdit(); setSelection(null); setPalette(null);
@@ -496,20 +586,26 @@ export default function App() {
           <div className="vellum-layer">{Object.values(document.items).filter(item => item.data.type === 'sticky' && item.data.variant === 'vellum').map(renderItem)}</div>
           <AccessoryTray held={tapeHeld} onPickUp={event => {
             finishEdit(); cancelGesture(); setSelection(null);
-            setTapeCursor({ x: event.clientX, y: event.clientY }); setTapeHeld(held => !held);
+            const rect = event.currentTarget.getBoundingClientRect();
+            // Keyboard-generated clicks have (0, 0) coordinates: lift from the roll itself.
+            setTapeCursor(event.detail === 0
+              ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+              : { x: event.clientX, y: event.clientY });
+            setTapeHeld(held => !held);
           }} />
           {tapeGeometry && <div className="tape-preview" style={tapeGeometry}><Tape /></div>}
-          <Ropes document={document} selected={selection?.type === 'rope' ? selection.id : undefined} temporary={temporary} onSelect={id => { finishEdit(); setPalette(null); setSelection({ type: 'rope', id }); }} />
+          <Ropes document={document} selected={selection?.type === 'rope' ? selection.id : undefined} temporary={temporary} onSelect={id => { finishEdit(); setPalette(null); setSelection({ type: 'rope', id }); sound.play('pluck'); }} />
           {pinPreview && <div className="pin-preview"><Pin decorative center={lightingCenter} pin={{ id: 'preview', itemId: null, xRatio: 0, yRatio: 0, color: pinPreview.color }} position={pinPreview.position} moving connecting={false} onPointerDown={() => {}} onPalette={() => {}} /></div>}
-          <div className="pins-layer">{Object.values(document.pins).sort((a, b) => (a.itemId ? document.items[a.itemId].zIndex : 0) - (b.itemId ? document.items[b.itemId].zIndex : 0)).map(pin => <Pin key={pin.id} center={lightingCenter} pin={pin} position={pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined)} moving={movingPin === pin.id} connecting={!!temporary && temporary.from !== pin.id} onPointerDown={pinDown} onPalette={pin => { finishEdit(); cancelGesture(); setPalette({ type: 'pin', id: pin.id }); }} />)}</div>
+          <div className="pins-layer">{Object.values(document.pins).sort((a, b) => (a.itemId ? document.items[a.itemId].zIndex : 0) - (b.itemId ? document.items[b.itemId].zIndex : 0)).map(pin => <Pin key={pin.id} center={lightingCenter} pin={pin} position={pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined)} moving={movingPin === pin.id} connecting={temporary?.target === pin.id} onPointerDown={pinDown} onPalette={pin => { finishEdit(); cancelGesture(); setPalette({ type: 'pin', id: pin.id }); }} />)}</div>
         </div>
       </div>
     </main>
     {tapeHeld && <div className="tape-cursor" style={{ left: tapeCursor.x, top: tapeCursor.y, width: 160 * scale, height: 91 * scale, transform: `translate(-50%, -50%) rotate(${tapePreview ? Math.atan2(tapePreview.end.y - tapePreview.start.y, tapePreview.end.x - tapePreview.start.x) * 180 / Math.PI : -12}deg)` }}><TapeRoll /></div>}
-    <QuickLabel boardBottom={size.height / 2 - 40 + pan.y + 500 * scale} enabled={!dashboard && !selection && !editing && !palette && !tapeHeld && !activeGesture} onCommit={(text, measured) => {
+    <QuickLabel boardBottom={center.y + pan.y + 500 * scale} enabled={!dashboard && !selection && !editing && !palette && !tapeHeld && !activeGesture} onAppear={() => sound.play('paper')} onCommit={(text, measured) => {
       const width = measured.width / scale, height = Math.min(measured.height / scale, document.board.height);
       const p = point({ clientX: size.width / 2, clientY: 32 });
-      const id = commands.createItem({ type: 'sticky', variant: 'vellum', color: '#ffffff70', text, fontSize: 16 / scale }, { x: p.x - width / 2, y: p.y - 14 }, { width, height }, 0);
+      const id = commands.createItem({ type: 'sticky', variant: 'vellum', color: '#ffffff88', text, fontSize: 16 / scale }, { x: p.x - width / 2, y: p.y - 14 }, { width, height }, 0);
+      sound.play('launch');
       setSelection({ type: 'item', id });
       if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(() => {
         const paper = board.current?.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
@@ -524,9 +620,28 @@ export default function App() {
     }} />
 
     {lightbox && document.items[lightbox.id] && <ImageLightbox item={document.items[lightbox.id]} from={lightbox.from} boardScale={scale} onClose={() => setLightbox(null)} />}
+    {!dashboard && !lightbox && !palette && <p className="board-hint" style={{ top: Math.min(size.height - 22, center.y + pan.y + 500 * scale + 7), maxWidth: Math.max(200, Math.min(560, 950 * scale)) }}>
+      {cropping ? <><b>drag</b> crop · <b>enter</b> apply · <b>esc</b> cancel · <b>r</b> reset</>
+        : editing ? <><b>esc</b> finish editing</>
+        : tapeHeld ? <><b>drag</b> place tape · <b>esc</b> put away</>
+        : temporary ? <><b>space</b> connect pin · <b>esc</b> cancel</>
+        : hintItem?.data.type === 'image' ? <><b>enter</b> frame · <b>space</b> enlarge · <b>double-click</b> crop</>
+        : hintItem?.data.type === 'website' ? <><b>enter</b> compact / expand · <b>double-click title</b> edit · <b>esc</b> deactivate</>
+        : hintItem?.data.type === 'sticky' && hintItem.data.variant ? <><b>enter</b> change label · <b>double-click</b> edit</>
+        : selection ? <><b>delete</b> remove · <b>esc</b> deselect</>
+        : <><b>pinch</b> zoom · <b>scroll</b> pan · <b>double-click outside</b> dashboard</>}
+    </p>}
 
     {dashboard && <Dashboard archives={weeks.archives} conflicts={weeks.conflicts} onResolve={resolveConflict} current={{ ...weeks.current, doc: store.getSnapshot() }} onClose={() => setDashboard(false)} />}
-    <div className="board-status"><span className={`sync-${cloudState.status}`}><i /><SyncStatus state={cloudState} /></span></div>
+    <div className="board-status">
+      <button className="board-sound-toggle" onClick={toggleSound} aria-label="Board sound effects" aria-pressed={soundEnabled} title={soundEnabled ? 'Mute board sounds' : 'Enable board sounds'}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M11 5 6 9H3v6h3l5 4Z" />
+          {soundEnabled ? <><path d="M15 8a6 6 0 0 1 0 8" /><path d="M18 5a10 10 0 0 1 0 14" /></> : <path d="m16 9 5 6m0-6-5 6" />}
+        </svg>
+      </button>
+      <span className={`sync-${cloudState.status}`}><i /><SyncStatus state={cloudState} /></span>
+    </div>
     {palettePoint && palettePos && <ColorPalette kind={palettePin ? 'pin' : 'paper'} value={palettePin?.color ?? (paletteItem?.data.type === 'sticky' ? paletteItem.data.color : '')}
       x={clamp(palettePos.x, 116, size.width - 116)} y={clamp(palettePos.y + 16, 14, size.height - 64)}
       onChange={color => { if (palettePin) commands.updatePin(palettePin.id, { color }); else if (paletteItem?.data.type === 'sticky') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, color } }); setPalette(null); }} />}

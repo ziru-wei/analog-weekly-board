@@ -2,12 +2,15 @@ import { useEffect, useRef, type CSSProperties, type PointerEvent, type MouseEve
 import { useNoteTextLayout } from './useNoteTextLayout';
 import { Tape } from './Tape';
 import { WebsiteCard } from './WebsiteCard';
+import type { LinkPreview } from '../linkPreview';
 import { PhotoImage } from './PhotoImage';
 import { CropLayer, type CropPatch } from './CropLayer';
 import { type BoardItem, clamp, variation } from '../model';
-export function Item({ item, selected, editing, pinTarget, onPointerDown, onResize, onEdit, onText, onFinishEdit, onContextMenu, onAddPin, onCrop, cropping, boardScale, onCropApply, onCropCancel }: {
+export function Item({ item, selected, webInteractive, editing, pinTarget, onPointerDown, onResize, onEdit, onText, onFinishEdit, onContextMenu, onAddPin, onCrop, cropping, boardScale, onCropApply, onCropCancel, onWebsiteMinHeight, onWebsitePreview }: {
   cropping: boolean; boardScale: number; onCropApply: (patch: CropPatch) => void; onCropCancel: () => void;
-  item: BoardItem; selected: boolean; editing: boolean; pinTarget?: boolean;
+  item: BoardItem; selected: boolean; webInteractive: boolean; editing: boolean; pinTarget?: boolean;
+  onWebsiteMinHeight: (height: number) => void;
+  onWebsitePreview: (preview: LinkPreview) => void;
   onPointerDown: (event: PointerEvent, item: BoardItem) => void; onResize: (event: PointerEvent, item: BoardItem, side?: 'left' | 'right') => void;
   onCrop: () => void; onEdit: () => void; onText: (text: string) => void; onFinishEdit: () => void; onContextMenu: (event: MouseEvent, item: BoardItem) => void; onAddPin: (event: MouseEvent, item: BoardItem) => void;
 }) {
@@ -28,7 +31,7 @@ export function Item({ item, selected, editing, pinTarget, onPointerDown, onResi
         {editing ? <input ref={captionInput} value={data.caption ?? ''} maxLength={80} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} aria-label="Photo caption" onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === 'Escape') onFinishEdit(); }} /> : <span>{data.caption}</span>}
       </div>}</>}
     {data.type === 'image' && cropping && <CropLayer item={item} boardScale={boardScale} onApply={onCropApply} onCancel={onCropCancel} />}
-    {data.type === 'website' && <WebsiteCard data={data} width={item.width} height={item.height} editing={editing} onEdit={onEdit} onText={onText} onFinishEdit={onFinishEdit} />}
+    {data.type === 'website' && <WebsiteCard data={data} width={item.width} height={item.height} interactive={webInteractive} editing={editing} onEdit={onEdit} onText={onText} onFinishEdit={onFinishEdit} onMinHeight={onWebsiteMinHeight} onPreview={onWebsitePreview} />}
     {selected && !editing && data.type === 'tape' && (['left', 'right'] as const).map(side => <button key={side} className={`tape-length-handle ${side}`} aria-label={`Adjust tape ${side} end`} onPointerDown={event => onResize(event, item, side)} />)}
     {selected && !editing && !cropping && data.type !== 'tape' && <button className="resize-handle" aria-label="Resize item" onPointerDown={event => onResize(event, item)} />}
   </article>;
