@@ -38,11 +38,11 @@ export function Dashboard({ archives, conflicts, current, onResolve, onClose }: 
     </header>
 
     <div className="dash-grid">
-      <button className="dash-card current" title="Double-click to open this week" onDoubleClick={onClose} onClick={event => { if (event.detail === 0) onClose(); }}>
+      <button className="dash-card current" onDoubleClick={onClose} onClick={event => { if (event.detail === 0) onClose(); }}>
         <span className="dash-thumb-frame"><BoardPreview doc={current.doc} className="dash-thumb" simplified /></span>
         <span className="dash-meta"><b>This week</b><i>{weekLabel(current.weekStart, current.startedOn, currentEnd)}</i><em>In progress</em></span>
       </button>
-      {sorted.map(a => <button key={a.id} className="dash-card" title="Double-click to open archive" onDoubleClick={() => setOpen(a)} onClick={event => { if (event.detail === 0) setOpen(a); }}>
+      {sorted.map(a => <button key={a.id} className="dash-card" onDoubleClick={() => setOpen(a)} onClick={event => { if (event.detail === 0) setOpen(a); }}>
         <span className="dash-thumb-frame"><BoardPreview doc={a.doc} className="dash-thumb" simplified /></span>
         <span className="dash-meta"><b>{weekLabel(a.weekStart, a.startedOn, a.weekEnd)}</b><i>{countItems(a.doc)} {countItems(a.doc) === 1 ? 'item' : 'items'}</i>{isPartial(a.weekStart, a.startedOn) && <em>Partial week</em>}</span>
       </button>)}

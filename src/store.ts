@@ -27,10 +27,53 @@ export function createDocumentStore(initial: BoardDocument) {
     createItem(data: ItemData, position = { x: 620, y: 340 }, size = { width: 190, height: 165 }, rotation?: number) {
       const id = crypto.randomUUID();
       const pinId = crypto.randomUUID();
-      const pin: Pin = { id: pinId, itemId: id, xRatio: .5, yRatio: .065, color: data.type === 'image' ? '#f5f5f0' : PIN_COLORS[0] };
+      const pin: Pin = { id: pinId, itemId: id, xRatio: data.type === 'website' ? .94 : .5, yRatio: .065, color: data.type === 'image' ? '#f5f5f0' : PIN_COLORS[0] };
       const hasPin = data.type === 'image' || data.type === 'website';
       const item: BoardItem = constrainItem({ id, type: data.type, ...position, ...size, rotation: rotation ?? variation(id) * 2 - 1, zIndex: Math.max(0, ...Object.values(document.items).map(i => i.zIndex)) + 1, data, pins: hasPin ? [pinId] : [] }, document.board, hasPin ? [pin] : [], clipBounds);
       publish({ ...document, items: { ...document.items, [id]: item }, pins: hasPin ? { ...document.pins, [pinId]: pin } : document.pins });
+      return id;
+    },
+    moveItems(sources: BoardItem[], offset: Point) {
+      let dx = offset.x, dy = offset.y;
+      for (const source of sources) {
+        const next = constrainItem({ ...source, x: source.x + offset.x, y: source.y + offset.y }, document.board,
+          source.pins.map(id => document.pins[id]).filter(Boolean), clipBounds);
+        const allowedX = next.x - source.x, allowedY = next.y - source.y;
+        dx = offset.x >= 0 ? Math.min(dx, Math.max(0, allowedX)) : Math.max(dx, Math.min(0, allowedX));
+        dy = offset.y >= 0 ? Math.min(dy, Math.max(0, allowedY)) : Math.max(dy, Math.min(0, allowedY));
+      }
+      const items = { ...document.items };
+      for (const source of sources) if (items[source.id]) items[source.id] = { ...items[source.id], x: source.x + dx, y: source.y + dy };
+      publish({ ...document, items });
+    },
+    duplicateItems(sources: BoardItem[], sourcePins: Pin[], sourceConnections: BoardDocument['connections'], offset = { x: 24, y: 24 }) {
+      const items = { ...document.items }, pins = { ...document.pins }, connections = { ...document.connections };
+      const pinIds = new Map<string, string>();
+      const ids: string[] = [];
+      const top = Math.max(0, ...Object.values(items).map(item => item.zIndex));
+      for (const [index, source] of [...sources].sort((a, b) => a.zIndex - b.zIndex).entries()) {
+        const id = crypto.randomUUID(); ids.push(id);
+        const attached = sourcePins.filter(pin => source.pins.includes(pin.id)).map(pin => {
+          const copy = { ...pin, id: crypto.randomUUID(), itemId: id }; pinIds.set(pin.id, copy.id); pins[copy.id] = copy; return copy;
+        });
+        items[id] = { ...structuredClone(source), id, x: source.x + offset.x, y: source.y + offset.y,
+          zIndex: top + index + 1, pins: attached.map(pin => pin.id) };
+      }
+      for (const connection of Object.values(sourceConnections)) {
+        const fromPinId = pinIds.get(connection.fromPinId), toPinId = pinIds.get(connection.toPinId);
+        if (fromPinId && toPinId) { const id = crypto.randomUUID(); connections[id] = { id, fromPinId, toPinId }; }
+      }
+      publish({ ...document, items, pins, connections });
+      return ids;
+    },
+    duplicateItem(source: BoardItem, sourcePins: Pin[], position = { x: source.x + 24, y: source.y + 24 }) {
+      const id = crypto.randomUUID();
+      const copiedPins = sourcePins.filter(pin => source.pins.includes(pin.id)).map(pin => ({ ...pin, id: crypto.randomUUID(), itemId: id }));
+      const item = constrainItem({ ...structuredClone(source), id, ...position,
+        zIndex: Math.max(0, ...Object.values(document.items).map(item => item.zIndex)) + 1,
+        pins: copiedPins.map(pin => pin.id) }, document.board, copiedPins, clipBounds);
+      publish({ ...document, items: { ...document.items, [id]: item },
+        pins: { ...document.pins, ...Object.fromEntries(copiedPins.map(pin => [pin.id, pin])) } });
       return id;
     },
     updateItem(id: string, patch: Partial<Pick<BoardItem, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'zIndex' | 'data'>>) {

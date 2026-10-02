@@ -90,12 +90,12 @@ textarea.note-text { cursor: text; user-select: text; overflow: auto; }
 .board-item.vellum-label, .quick-label.visible { background: #ffffff70; -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); box-shadow: 0 1px 2px #21160d35, inset 0 1px #ffffff50; }
 .vellum-label .note-text { color: #000; font-family: 'Tracing Mono', monospace; font-weight: 400; line-height: 1.25; padding: .5em .75em; }
 .vellum-label::before { display: none; }
-.quick-label { position: fixed; z-index: 25; top: 0; left: 50%; transform: translateX(-50%); opacity: 0; pointer-events: none; }
+.quick-label { position: fixed; z-index: 25; top: 0; left: 50%; transform: translateX(-50%); opacity: 0; pointer-events: none; overflow: hidden; transition: height 180ms ease-out; }
 .quick-label.visible { opacity: 1; pointer-events: auto; animation: feed-tracing-paper 180ms ease-out; }
 .quick-label textarea { display: block; max-width: calc(100vw - 40px); min-height: 36px; field-sizing: content; padding: 8px 12px; margin: 0; border: 0; resize: none; outline: 0; background: transparent; color: #000; font: 400 16px/20px 'Tracing Mono', monospace; }
 
 @keyframes feed-tracing-paper { from { transform: translate(-50%, -100%); } to { transform: translate(-50%, 0); } }
-@media (prefers-reduced-motion: reduce) { .quick-label.visible { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .quick-label.visible { animation: none; } .quick-label { transition: none; } }
 
 .board-item.is-pin-target { outline: 1px solid #fff; outline-offset: 2px; }
 .board-status .sync-idle i { background: #8fc98a; }
@@ -112,3 +112,36 @@ textarea.note-text { cursor: text; user-select: text; overflow: auto; }
 .crop-handle.sw { left: calc(-5px * var(--u)); bottom: calc(-5px * var(--u)); cursor: nesw-resize; } .crop-handle.se { right: calc(-5px * var(--u)); bottom: calc(-5px * var(--u)); cursor: nwse-resize; }
 .crop-handle.n { left: calc(50% - 5px * var(--u)); top: calc(-5px * var(--u)); cursor: ns-resize; } .crop-handle.s { left: calc(50% - 5px * var(--u)); bottom: calc(-5px * var(--u)); cursor: ns-resize; }
 .crop-handle.w { top: calc(50% - 5px * var(--u)); left: calc(-5px * var(--u)); cursor: ew-resize; } .crop-handle.e { top: calc(50% - 5px * var(--u)); right: calc(-5px * var(--u)); cursor: ew-resize; }
+
+.youtube-player { flex-shrink: 0; background: #151515; color: #ddd; display: grid; place-items: center; }
+.youtube-player iframe { display: block; width: 100%; border: 0; background: #151515; }
+.youtube-player > span { padding: 16px; font: 13px/1.5 system-ui, sans-serif; }
+.canvas-loading > :not(.canvas-loader) { opacity: 0; pointer-events: none; }
+.canvas-loader { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: #191a18; }
+.loading-spinner { width: 28px; height: 28px; border: 2px solid #ffffff26; border-top-color: #d1ccc2; border-radius: 50%; animation: board-loading .8s linear infinite; }
+@keyframes board-loading { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loading-spinner { animation-duration: 2s; } }
+
+.social-embed { flex-shrink: 0; background: #fff; overflow: hidden; }
+.social-embed iframe { width: 100%; height: 100%; border: 0; display: block; }
+.embed-unavailable { height: 100%; display: flex; flex-direction: column; justify-content: center; padding: 28px; color: #555; font: 14px/1.6 system-ui, sans-serif; }
+.embed-unavailable strong { font-size: 24px; color: #e5495f; }
+.link-preview-unavailable { font: 13px/1.5 system-ui, sans-serif; color: #777; }
+
+.embed-permission { padding: 18px; font: 13px/1.5 system-ui, sans-serif; text-align: center; }
+.embed-permission button { display: inline-block; margin-top: 8px; padding: 8px 12px; border-radius: 4px; background: #e4e1d9; color: #292b29; }
+
+.clipping-domain { display: block; align-self: flex-start; width: fit-content; max-width: 100%; min-width: 0; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'IBM Plex Mono', 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; font-size: 13px; font-weight: 550; line-height: 1.2; font-variant-numeric: slashed-zero tabular-nums; font-feature-settings: "zero" 1, "tnum" 1; letter-spacing: -.045em; color: #454b54; text-decoration: none; text-underline-offset: 3px; cursor: pointer; }
+.clipping-domain:hover, .clipping-domain:focus-visible { color: #1d4f91; text-decoration: underline; background-color: #315e9410; }
+.compact-link { display: flex; flex-direction: column; gap: 5px; height: 100%; padding: 10px 18px 10px 12px; color: #30343a; overflow: hidden; }
+.compact-link-body { display: flex; align-items: center; gap: 10px; flex: 1; min-height: 0; }
+.compact-link-image { flex: 0 0 76px; min-width: 0; position: relative; overflow: hidden; display: grid; place-items: center; background: #dbd8d0; font: 20px Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.compact-link-image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(.78) contrast(.96) brightness(1.025); }
+.compact-link-perforation { align-self: stretch; flex: 0 0 0; border-left: 1.5px dashed rgba(48, 55, 64, .62); }
+.compact-link-content { min-width: 0; flex: 1; max-height: 100%; overflow: hidden; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.16; font-weight: 620; letter-spacing: -.018em; }
+.compact-link .website-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.compact-link textarea { width: 100%; height: 37px; padding: 0; resize: none; border: 0; background: transparent; font: inherit; letter-spacing: inherit; color: inherit; }
+.compact-preview-permission { padding: 2px 0; font-size: 10px; color: #555; text-decoration: underline; }
+
+.youtube-player { position: relative; overflow: hidden; }
+.youtube-viewport { position: absolute; left: 50%; top: 50%; transform-origin: center; }

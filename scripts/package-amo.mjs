@@ -35,14 +35,18 @@ npm run build:firefox
 Output: \`dist-ext/firefox/\` (this is what was zipped and uploaded). Both env values are public identifiers (an OAuth client ID and the URL of the auth worker); no secret is in the package.
 
 ## About the lint warnings
-- \`DANGEROUS_EVAL\` / \`UNSAFE_VAR_ASSIGNMENT\` (innerHTML, dynamic import) come from bundled third-party libraries: three.js, threepipe and @threepipe/webgi-plugins (WebGL rendering of the colour palette tray). The app's own code does not use eval, and does not assign dynamic strings to innerHTML. No remote scripts are fetched or executed.
+- \`DANGEROUS_EVAL\` / \`UNSAFE_VAR_ASSIGNMENT\` (innerHTML, dynamic import) come from bundled third-party libraries: three.js, threepipe and @threepipe/webgi-plugins (WebGL rendering of the colour palette tray). The app's own code does not use eval, and does not assign dynamic strings to innerHTML. No remote scripts execute in the extension page. YouTube, Instagram, X and Xiaohongshu content runs only in isolated, cross-origin provider iframes.
 
 ## Network and permissions
 - \`identity\`: used with \`identity.launchWebAuthFlow\` for Google OAuth (authorization code + PKCE).
 - \`unlimitedStorage\`: IndexedDB holds boards and photos pasted by the user.
-- Host permissions: \`https://www.googleapis.com/*\` (Drive REST API), \`https://oauth2.googleapis.com/*\` (token revocation).
+- \`webRequest\` / \`webRequestBlocking\`: sets the app’s public HTTPS identity as Referer only for youtube-nocookie.com/embed/ subframes initiated by this extension, so YouTube can identify the embedding client. It does not modify normal website traffic.
+- YouTube: opening a board with a YouTube clipping loads its player and fetches its title from youtube.com/oembed; no autoplay, no downloaded videos, and no players in Dashboard thumbnails.
+- Optional \`http://*/*\` and \`https://*/*\` access is requested only when the user clicks "Enable website previews". The background fetches only board-requested links without cookies, limits HTML to 2 MB, and returns text for metadata parsing; it never executes page scripts. Instagram/X/Xiaohongshu frames remain cross-origin. Login-required notes show a fallback.
+- Firefox checks YouTube host grants before loading the player and prompts only after an explicit "Allow YouTube playback" click; this covers upgrades where added host grants are absent.
+- Host permissions: \`https://www.googleapis.com/*\` (Drive REST API), \`https://oauth2.googleapis.com/*\` (token revocation), \`https://www.youtube-nocookie.com/*\` (embedded video playback).
 - Other requests: \`accounts.google.com\` (sign-in page), the auth worker${env.VITE_AUTH_WORKER_URL ? ` (${env.VITE_AUTH_WORKER_URL})` : ''} (exchanges the one-time code / refreshes access tokens; stateless, stores nothing), and Google Fonts (a stylesheet + font file for one typeface).
-- Data collection: nothing is collected unless the user signs in; then authentication tokens and basic profile (name, email, photo) are used for sync only. Privacy policy: https://ziru-wei.github.io/analog-weekly-board/privacy.html
+- Data handling: Google sign-in is optional; authentication tokens and basic profile (name, email, photo) are used for sync only. When the user opens a board containing a YouTube clipping, YouTube receives the video ID, IP address and normal playback request information even when signed out of sync. Privacy policy: https://ziru-wei.github.io/analog-weekly-board/privacy.html
 
 ## Testing
 Everything except sync works without an account. To test sync you need a Google account; open the Dashboard (double-click the dark area outside the board) and use "Sign in with Google".

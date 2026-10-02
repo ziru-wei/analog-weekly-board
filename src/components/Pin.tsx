@@ -17,7 +17,7 @@ export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connec
   const shadowAngle = Math.atan2(lightY, lightX) * 180 / Math.PI;
 
   return <button className={`pin ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
-    aria-label={label ?? "Pushpin: drag to connect; hold to move; right-click to recolor"} title={label ?? "Drag to connect · Drop on cork to remove · Hold to move · Right-click to recolor"}
+    aria-label={label ?? "Pushpin: drag to connect; hold to move; right-click to recolor"}
     style={{ left: position.x, top: position.y }}
     onPointerDown={event => onPointerDown(event, pin)} onDoubleClick={event => event.stopPropagation()}
     onContextMenu={event => { event.preventDefault(); event.stopPropagation(); onPalette(pin); }} onClick={event => { event.stopPropagation(); if (event.detail === 0) onPalette(pin); }}>

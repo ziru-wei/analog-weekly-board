@@ -11,15 +11,23 @@ const base = {
   description: 'A weekly corkboard that archives itself weekly and syncs through your Google Drive.',
   action: { default_title: 'Open Analog Weekly Board', default_icon: { 128: 'icons/icon-128.png' } },
   icons: { 128: 'icons/icon-128.png' },
-  permissions: ['identity', 'unlimitedStorage'],
-  host_permissions: ['https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*'],
-  content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
+  permissions: ['identity', 'unlimitedStorage', 'declarativeNetRequestWithHostAccess'],
+  host_permissions: ['https://www.googleapis.com/*', 'https://oauth2.googleapis.com/*', 'https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'],
+  optional_host_permissions: ['https://*/*', 'http://*/*'],
+  content_security_policy: { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; frame-src https://www.youtube-nocookie.com https://www.instagram.com https://platform.twitter.com https://www.xiaohongshu.com" },
 };
 const manifests = {
   // `key` pins Chrome's extension ID, so the Google redirect URI https://<id>.chromiumapp.org/ is the same for every install.
   chrome: { ...base, key: readFileSync('extension/chrome-key.pub.b64', 'utf8').trim(), background: { service_worker: 'background.js' } },
   firefox: {
     ...base,
+    permissions: ['identity', 'unlimitedStorage', 'webRequest', 'webRequestBlocking'],
+    commands: {
+      _execute_action: {
+        suggested_key: { default: 'Alt+Period', mac: 'Alt+Period' },
+        description: 'Open or focus Analog Weekly Board',
+      },
+    },
     background: { scripts: ['background.js'] },
     browser_specific_settings: {
       gecko: {

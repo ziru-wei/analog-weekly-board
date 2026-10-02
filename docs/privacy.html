@@ -4,7 +4,7 @@
 <p>Analog Weekly Board (“the app”) is a browser app and browser extension for keeping a weekly corkboard of notes, photos and links. This policy explains what data the app handles. In short: your boards stay on your device and, only if you choose to sign in, in your own Google Drive. We do not run a database of user data, and we do not sell, share or analyze it.</p>
 
 <h2>Data stored on your device</h2>
-<p>Your boards, weekly archives, pasted photos and settings are stored in your browser’s local storage (IndexedDB). This data never leaves your device unless you sign in to sync.</p>
+<p>Your boards, weekly archives, pasted photos and settings are stored in your browser’s local storage (IndexedDB). Board documents stay on your device unless you sign in to sync. Opening a board containing a YouTube link loads its player and requests its title from YouTube as described below.</p>
 
 <h2>If you sign in with Google</h2>
 <p>Signing in is optional. When you do, the app asks for these permissions:</p>
@@ -21,9 +21,12 @@
 <ul>
 <li><strong>Google</strong> (sign-in and Drive) — governed by <a href="https://policies.google.com/privacy">Google’s Privacy Policy</a>.</li>
 <li><strong>Google Fonts</strong> — the app loads a typeface from fonts.googleapis.com, so Google receives your IP address when the font is requested.</li>
+<li><strong>YouTube</strong> — opening a board containing a YouTube clipping automatically loads an embedded player from youtube-nocookie.com and requests its title from youtube.com/oembed. YouTube receives the video identifier, your IP address and normal browser request information, and handles playback under <a href="https://policies.google.com/privacy">Google’s Privacy Policy</a>. Playback does not start automatically. Dashboard thumbnails do not load players.</li>
+<li><strong>Instagram, X and Xiaohongshu</strong> — opening a board containing these posts loads the provider’s frame. The provider receives the post URL, IP address and standard browser information, and may require sign-in. Dashboard thumbnails do not load live frames.</li>
+<li><strong>Website previews</strong> — after you enable this optional permission, links on your board are fetched without account cookies to extract titles, descriptions and image URLs. The extension does not monitor other tabs or execute fetched HTML. Preview images load from their original hosts.</li>
 <li><strong>Cloudflare</strong> — hosts the sign-in service described above.</li>
 </ul>
-<p>The app has no advertising, no analytics and no trackers. Websites you add as clippings are only linked to; the app does not fetch or store their content.</p>
+<p>The app does not add advertising or analytics. When website previews are enabled, the extension fetches URLs on your board without account cookies to extract titles, summaries and image URLs. It never executes the fetched HTML. Preview images are then loaded from the page’s image host. YouTube clippings load a third-party player, which may display advertising and process playback information. The app does not download or store video files.</p>
 
 <h2>Google API Services User Data Policy</h2>
 <p>The app’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Data obtained from Google is used only to provide the sync feature you requested; it is not used for advertising, is not sold, and is not transferred to anyone else.</p>

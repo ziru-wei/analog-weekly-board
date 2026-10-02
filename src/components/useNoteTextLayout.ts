@@ -10,7 +10,7 @@ export function useNoteTextLayout(item: BoardItem, ref: RefObject<HTMLElement | 
     let disposed = false;
     const fit = () => {
       if (disposed) return;
-      if (data.variant === 'vellum') { element.style.fontSize = `${data.fontSize ?? 16}px`; return; }
+      if (data.variant) { element.style.fontSize = `${data.fontSize ?? (data.variant === 'vellum' ? 16 : 14)}px`; return; }
       let size = clamp(Math.min(width * .08, height * .12), 14, 22);
       element.style.fontSize = `${size}px`;
       while (size > 14 && element.scrollHeight > element.clientHeight + 1) element.style.fontSize = `${--size}px`;

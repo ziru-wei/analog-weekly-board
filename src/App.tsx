@@ -1,4 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { BOARD_CLIPBOARD_TYPE, encodeBoardGroup, readBoardGroup } from './boardClipboard';
+import { toggleLabel } from './labelLayout';
+import { youtubeVideo } from './youtube';
+import { socialPost, websiteCardSize, toggleWebsiteCard } from './socialEmbed';
+import { useCanvasReady } from './useCanvasReady';
 import { SyncStatus } from './components/SyncStatus';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
@@ -32,9 +37,9 @@ let commands: ReturnType<typeof createDocumentStore>['commands'];
 /** Called once from main.tsx, after the saved week state has been read from IndexedDB. */
 export function initApp(week: WeekState) { initialWeek = week; store = createDocumentStore(week.current.doc); commands = store.commands; }
 const HOLD_MS = 480, MAX_ZOOM = 2.5;
-type Selection = { type: 'item' | 'pin' | 'rope'; id: string } | null;
+type Selection = { type: 'item' | 'pin' | 'rope'; id: string; ids?: string[] } | null;
 type Gesture =
-  | { kind: 'drag' | 'resize'; start: Point; item: BoardItem; moved: boolean; side?: 'left' | 'right' }
+  | { kind: 'drag' | 'resize'; start: Point; item: BoardItem; moved: boolean; side?: 'left' | 'right'; duplicate?: boolean; items?: BoardItem[] }
   | { kind: 'pin'; start: Point; pin: PinModel; mode: 'pending' | 'connect' | 'move'; moved: boolean }
   | { kind: 'tape'; start: Point; end: Point; moved: boolean }
   | { kind: 'pin-supply'; start: Point; color: string; moved: boolean }
@@ -43,6 +48,7 @@ type Gesture =
 type Palette = { type: 'pin' | 'paper'; id: string } | null;
 export default function App() {
   const document = useDocument(store);
+  const canvasReady = useCanvasReady();
   const viewport = useRef<HTMLDivElement>(null), board = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const gesture = useRef<Gesture | null>(null), holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<{ element: Element; pointerId: number } | null>(null);
@@ -175,7 +181,7 @@ export default function App() {
   const travelHistory = (redo: boolean) => { finishEdit(); cancelGesture(); if (redo) commands.redo(); else commands.undo(); setSelection(null); };
   const removeSelection = () => {
     if (!selection) return;
-    if (selection.type === 'item') commands.deleteItem(selection.id);
+    if (selection.type === 'item') { commands.beginTransaction(); for (const id of selection.ids ?? [selection.id]) commands.deleteItem(id); commands.finishTransaction(); }
     else if (selection.type === 'pin') commands.deletePin(selection.id);
     else commands.deleteConnection(selection.id);
     setSelection(null); setPalette(null);
@@ -198,8 +204,17 @@ export default function App() {
   const startEdit = (id: string) => { finishEdit(); commands.beginTransaction(); selectItem(id); setEditing(id); setPalette(null); };
   const itemDown = (event: ReactPointerEvent, item: BoardItem) => {
     if (event.button !== 0 || editing === item.id) return;
-    event.stopPropagation(); finishEdit(); setPalette(null); commands.beginTransaction(); selectItem(item.id);
-    gesture.current = { kind: 'drag', start: point(event), item, moved: false }; capture(event);
+    event.stopPropagation(); finishEdit(); setPalette(null);
+    const currentIds = selection?.type === 'item' ? selection.ids ?? [selection.id] : [];
+    if (event.shiftKey) {
+      const ids = currentIds.includes(item.id) ? currentIds.filter(id => id !== item.id) : [...currentIds, item.id];
+      setSelection(ids.length ? { type: 'item', id: ids[ids.length - 1], ids } : null); return;
+    }
+    commands.beginTransaction();
+    const ids = currentIds.includes(item.id) ? currentIds : [item.id];
+    setSelection({ type: 'item', id: item.id, ids });
+    const items = ids.map(id => store.getSnapshot().items[id]).filter(Boolean);
+    gesture.current = { kind: 'drag', start: point(event), item, items, moved: false, duplicate: event.altKey }; capture(event);
   };
   const resizeDown = (event: ReactPointerEvent, item: BoardItem, side?: 'left' | 'right') => {
     if (event.button !== 0) return;
@@ -240,13 +255,21 @@ export default function App() {
     if (Math.hypot(dx, dy) * scale > 5) g.moved = true;
     if (!g.moved) return;
     clearHold();
+    if (g.kind === 'drag' && g.duplicate) {
+      const snapshot = store.getSnapshot();
+      const sources = g.items ?? [g.item];
+      const ids = commands.duplicateItems(sources, Object.values(snapshot.pins), snapshot.connections, { x: 0, y: 0 });
+      g.items = ids.map(id => store.getSnapshot().items[id]);
+      g.item = g.items[0]; g.duplicate = false;
+      setSelection({ type: 'item', id: ids[0], ids });
+    }
     if (g.kind === 'supply') {
       if (!g.item) {
         const id = commands.createItem({ type: 'sticky', text: '', color: g.color }, NOTE_STACK_POSITION);
         g.item = store.getSnapshot().items[id]; setSelection({ type: 'item', id });
       }
       commands.updateItem(g.item.id, { x: NOTE_STACK_POSITION.x + dx, y: NOTE_STACK_POSITION.y + dy });
-    } else if (g.kind === 'drag') commands.updateItem(g.item.id, { x: g.item.x + dx, y: g.item.y + dy });
+    } else if (g.kind === 'drag') { commands.moveItems(g.items ?? [g.item], { x: dx, y: dy }); }
     else if (g.kind === 'resize') {
       const angle = g.item.rotation * Math.PI / 180;
       if (g.item.type === 'tape') {
@@ -263,6 +286,7 @@ export default function App() {
       let width = clamp(g.item.width + dx * Math.cos(angle) + dy * Math.sin(angle), label ? 100 : 150, 1550);
       let height = clamp(g.item.height - dx * Math.sin(angle) + dy * Math.cos(angle), label ? 26 : 110, 950);
       if (g.item.data.type === 'image' && !event.shiftKey) { const { x: edgeX, y: edgeY } = photoMargins(g.item.data.frame); width = Math.min(width, (950 - edgeY) * g.item.data.aspectRatio + edgeX); height = (width - edgeX) / g.item.data.aspectRatio + edgeY; }
+      if (g.item.data.type === 'website') { width = Math.max(150, width); height = Math.max(76, g.item.height - dx * Math.sin(angle) + dy * Math.cos(angle)); }
       commands.updateItem(g.item.id, { width, height });
     } else if (g.kind === 'pin') {
       setPalette(null);
@@ -302,7 +326,7 @@ export default function App() {
       const target = hit?.closest<HTMLElement>('[data-pin-id]')?.dataset.pinId;
       if (target) commands.createConnection(g.pin.id, target);
     }
-    if (g.kind === 'drag' && !g.moved && g.item.data.type === 'website') {
+    if (g.kind === 'drag' && (g.items?.length ?? 1) === 1 && !g.duplicate && !g.moved && g.item.data.type === 'website') {
       const target = window.document.elementFromPoint(event.clientX, event.clientY)?.closest('a');
       if (target) window.open(g.item.data.url, '_blank', 'noopener,noreferrer');
     }
@@ -327,18 +351,39 @@ export default function App() {
     }
   };
   useEffect(() => {
+    const onCopy = (event: ClipboardEvent) => {
+      if (dashboardRef.current || editing || gesture.current || selection?.type !== 'item' || !event.clipboardData) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('input, textarea, [contenteditable="true"]') && !(target.hasAttribute('data-quick-label') && !(target as HTMLTextAreaElement).value)) return;
+      const snapshot = store.getSnapshot();
+      const items = (selection.ids ?? [selection.id]).map(id => snapshot.items[id]).filter(Boolean);
+      if (!items.length) return;
+      const pinIds = new Set(items.flatMap(item => item.pins));
+      const pins = Object.values(snapshot.pins).filter(pin => pinIds.has(pin.id));
+      const connections = Object.fromEntries(Object.entries(snapshot.connections).filter(([, c]) => pinIds.has(c.fromPinId) && pinIds.has(c.toPinId)));
+      const encoded = encodeBoardGroup(items, pins, connections);
+      event.clipboardData.setData(BOARD_CLIPBOARD_TYPE, encoded);
+      event.clipboardData.setData('text/plain', encoded);
+      event.preventDefault();
+    };
     const onPaste = (event: ClipboardEvent) => {
       if (dashboardRef.current) return;
       if (((event.target as HTMLElement).closest('input, textarea, [contenteditable="true"]') && !((event.target as HTMLTextAreaElement).hasAttribute('data-quick-label') && !(event.target as HTMLTextAreaElement).value)) || gesture.current) return;
+      const copied = readBoardGroup(event.clipboardData?.getData(BOARD_CLIPBOARD_TYPE) || event.clipboardData?.getData('text/plain') || '');
+      if (copied) {
+        event.preventDefault(); finishEdit();
+        const ids = commands.duplicateItems(copied.items, copied.pins, copied.connections);
+        setSelection({ type: 'item', id: ids[0], ids }); return;
+      }
       const files = Array.from(event.clipboardData?.items ?? []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file);
       if (files.length) { event.preventDefault(); finishEdit(); void pasteImages(files); return; }
       const text = event.clipboardData?.getData('text/plain').trim(); if (!text) return;
       try {
         const url = new URL(text); if (!['http:', 'https:'].includes(url.protocol)) return;
         event.preventDefault(); finishEdit(); const p = pasteCenter(), domain = url.hostname.replace(/^www\./, '');
-        const width = 300;
-        const height = domain.length > 26 ? 102 : 76;
-        const id = commands.createItem({ type: 'website', url: url.href, domain, title: domain, description: '' }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
+        const video = youtubeVideo(url.href);
+        const { width, height } = websiteCardSize(url.href);
+        const id = commands.createItem({ type: 'website', url: url.href, domain, title: video ? 'YouTube video' : socialPost(url.href)?.label ?? domain, description: '' }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
       } catch { /* Plain text stays in the clipboard until a note is being edited. */ }
     };
     const onKey = (event: KeyboardEvent) => {
@@ -358,7 +403,17 @@ export default function App() {
         return;
       }
       if ((event.target as HTMLElement).closest('input, textarea, [contenteditable="true"]') && !((event.target as HTMLTextAreaElement).hasAttribute('data-quick-label') && !(event.target as HTMLTextAreaElement).value)) return;
-      const selected = selection?.type === 'item' ? document.items[selection.id] : undefined;
+      const selected = selection?.type === 'item' && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
+      if (selected?.data.type === 'sticky' && selected.data.variant && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        if (!event.repeat) { const patch = toggleLabel(selected); if (patch) commands.updateItem(selected.id, patch); }
+        return;
+      }
+      if (selected?.data.type === 'website' && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        if (!event.repeat) { const patch = toggleWebsiteCard(selected); if (patch) commands.updateItem(selected.id, patch); }
+        return;
+      }
       if (selected?.data.type === 'image' && !editing && !event.metaKey && !event.ctrlKey && !event.altKey) {
         if (event.key === 'Enter') { event.preventDefault(); if (!event.repeat) { finishEdit(); cycleFrame(selected); } return; }
         if (event.code === 'Space') { event.preventDefault(); if (!event.repeat) openLightbox(selected); return; }
@@ -368,8 +423,8 @@ export default function App() {
       if ((event.key === 'Delete' || event.key === 'Backspace') && !gesture.current) { event.preventDefault(); removeSelection(); }
     };
     const onBlur = () => { if (gesture.current) cancelGesture(); };
-    window.addEventListener('paste', onPaste); window.addEventListener('keydown', onKey); window.addEventListener('blur', onBlur);
-    return () => { window.removeEventListener('paste', onPaste); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); };
+    window.addEventListener('copy', onCopy); window.addEventListener('paste', onPaste); window.addEventListener('keydown', onKey); window.addEventListener('blur', onBlur);
+    return () => { window.removeEventListener('copy', onCopy); window.removeEventListener('paste', onPaste); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); };
   });
   useEffect(() => {
     const element = viewport.current; if (!element) return;
@@ -394,7 +449,7 @@ export default function App() {
     width: Math.hypot(tapePreview.end.x - tapePreview.start.x, tapePreview.end.y - tapePreview.start.y), height: TAPE_WIDTH,
     transformOrigin: '0 50%', transform: `rotate(${Math.atan2(tapePreview.end.y - tapePreview.start.y, tapePreview.end.x - tapePreview.start.x) * 180 / Math.PI}deg)`,
   } : undefined;
-  const renderItem = (item: BoardItem) => <Item key={item.id} item={item} pinTarget={pinDropTarget === item.id} selected={selection?.type === 'item' && selection.id === item.id} editing={editing === item.id}
+  const renderItem = (item: BoardItem) => <Item key={item.id} item={item} pinTarget={pinDropTarget === item.id} selected={selection?.type === 'item' && (selection.ids ?? [selection.id]).includes(item.id)} editing={editing === item.id}
             onAddPin={(event, target) => { finishEdit(); const p = localPoint(point(event), target); commands.createPin(target.id, p.x / target.width, p.y / target.height); }}
             cropping={cropping === item.id} boardScale={scale} onCropCancel={() => setCropping(null)}
             onCropApply={patch => { commands.beginTransaction(); commands.updateItem(item.id, patch); commands.finishTransaction(); setCropping(null); }}
@@ -402,7 +457,8 @@ export default function App() {
             onPointerDown={itemDown} onResize={resizeDown} onEdit={() => startEdit(item.id)} onFinishEdit={finishEdit}
             onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); if (target.data.type === 'sticky') setPalette({ type: 'paper', id: target.id }); }}
             onText={text => { if (item.data.type === 'sticky') commands.updateItem(item.id, { data: { ...item.data, text } }); else if (item.data.type === 'image') commands.updateItem(item.id, { data: { ...item.data, caption: text } }); else if (item.data.type === 'website') commands.updateItem(item.id, { data: { ...item.data, title: text } }); }} />;
-  return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''}`}>
+  return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''} ${canvasReady ? '' : 'canvas-loading'}`} aria-busy={!canvasReady}>
+    {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
     <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Scroll to zoom; drag empty cork to pan."
       onPointerDownCapture={event => {
         if (!tapeHeld || event.button !== 0 || (event.target as Element).closest('.accessory-tray')) return;
@@ -455,15 +511,22 @@ export default function App() {
       const p = point({ clientX: size.width / 2, clientY: 32 });
       const id = commands.createItem({ type: 'sticky', variant: 'vellum', color: '#ffffff70', text, fontSize: 16 / scale }, { x: p.x - width / 2, y: p.y - 14 }, { width, height }, 0);
       setSelection({ type: 'item', id });
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(() => {
+        const paper = board.current?.querySelector<HTMLElement>(`[data-item-id="${id}"]`);
+        if (!paper) return;
+        const startY = -paper.getBoundingClientRect().top / scale;
+        paper.animate([
+          { transform: `translateY(${startY}px) rotate(0deg)` },
+          { transform: 'translateY(10px) rotate(.7deg)', offset: .7 },
+          { transform: 'translateY(0) rotate(0deg)' },
+        ], { duration: 360, easing: 'cubic-bezier(.16,.75,.3,1)' });
+      });
     }} />
+
     {lightbox && document.items[lightbox.id] && <ImageLightbox item={document.items[lightbox.id]} from={lightbox.from} boardScale={scale} onClose={() => setLightbox(null)} />}
-    {selection?.type === 'item' && document.items[selection.id]?.data.type === 'image' && !editing && !dashboard && !lightbox && !tapeHeld &&
-      <p className="photo-hint" style={{ top: Math.min(size.height - 24, size.height / 2 - 40 + pan.y + 500 * scale + 12) }}>{cropping
-        ? <><b>drag</b> to crop &nbsp;·&nbsp; <b>enter</b> apply &nbsp;·&nbsp; <b>esc</b> cancel &nbsp;·&nbsp; <b>r</b> reset</>
-        : <><b>enter</b> frame &nbsp;·&nbsp; <b>space</b> enlarge &nbsp;·&nbsp; <b>double-click</b> crop</>}</p>}
+
     {dashboard && <Dashboard archives={weeks.archives} conflicts={weeks.conflicts} onResolve={resolveConflict} current={{ ...weeks.current, doc: store.getSnapshot() }} onClose={() => setDashboard(false)} />}
-    <div className="board-status"><span className={`sync-${cloudState.status}`} title="Saved in this browser. Open Dashboard for sync and weekly settings."><i /><SyncStatus state={cloudState} /></span></div>
-    <p className="board-hint"><b>double-click</b> outside the board &nbsp;·&nbsp; dashboard</p>
+    <div className="board-status"><span className={`sync-${cloudState.status}`}><i /><SyncStatus state={cloudState} /></span></div>
     {palettePoint && palettePos && <ColorPalette kind={palettePin ? 'pin' : 'paper'} value={palettePin?.color ?? (paletteItem?.data.type === 'sticky' ? paletteItem.data.color : '')}
       x={clamp(palettePos.x, 116, size.width - 116)} y={clamp(palettePos.y + 16, 14, size.height - 64)}
       onChange={color => { if (palettePin) commands.updatePin(palettePin.id, { color }); else if (paletteItem?.data.type === 'sticky') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, color } }); setPalette(null); }} />}

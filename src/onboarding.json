@@ -1,0 +1,472 @@
+{
+  "board": {
+    "height": 1000,
+    "id": "my-board",
+    "title": "My Board",
+    "width": 1600
+  },
+  "connections": {
+    "4a747194-1292-4725-92c8-4eaaaaf6af54": {
+      "fromPinId": "pin-tracing",
+      "id": "4a747194-1292-4725-92c8-4eaaaaf6af54",
+      "toPinId": "pin-remember"
+    },
+    "7d5802a3-afb9-4aee-9ed7-3bd2d7dff395": {
+      "fromPinId": "pin-reference",
+      "id": "7d5802a3-afb9-4aee-9ed7-3bd2d7dff395",
+      "toPinId": "pin-tracing"
+    }
+  },
+  "items": {
+    "034d9d11-a065-416d-b71b-ca24e4820ee1": {
+      "data": {
+        "color": "#ffffff70",
+        "fontSize": 16,
+        "text": "to add me, just type something directly",
+        "type": "sticky",
+        "variant": "vellum"
+      },
+      "height": 111.66591442576711,
+      "id": "034d9d11-a065-416d-b71b-ca24e4820ee1",
+      "pins": [],
+      "rotation": 0.7519996533524245,
+      "type": "sticky",
+      "width": 110.25070756079612,
+      "x": 519.5488930234013,
+      "y": 140.26170468187274,
+      "zIndex": 117
+    },
+    "2266be37-6a8f-438d-b871-b9682d4e6a9c": {
+      "data": {
+        "color": "#202120",
+        "text": "urgent",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 28,
+      "id": "2266be37-6a8f-438d-b871-b9682d4e6a9c",
+      "pins": [],
+      "rotation": 0.0776332763670089,
+      "type": "sticky",
+      "width": 180,
+      "x": 1229.2076757460798,
+      "y": 30.41776710684274,
+      "zIndex": 164
+    },
+    "32b57c44-87e3-4d54-87ab-7f622c36e9c1": {
+      "data": {
+        "description": "",
+        "domain": "x.com",
+        "title": "gpt for gaussian splatting?",
+        "type": "website",
+        "url": "https://x.com/abstrakt314/status/2105756028935504032?s=20"
+      },
+      "height": 330.68814120173414,
+      "id": "32b57c44-87e3-4d54-87ab-7f622c36e9c1",
+      "pins": [
+        "193a789b-e237-4395-8820-619f5e3f2f9a"
+      ],
+      "rotation": 0.3063359161155148,
+      "type": "website",
+      "width": 281.2355716566124,
+      "x": 894.2977117604856,
+      "y": 220.36014405762305,
+      "zIndex": 98
+    },
+    "47093d69-6f3c-4a87-ab02-0b23cae24dcc": {
+      "data": {
+        "compact": true,
+        "description": "",
+        "domain": "youtube.com",
+        "expandedSize": {
+          "height": 297,
+          "width": 400
+        },
+        "title": "YouTube video",
+        "type": "website",
+        "url": "https://www.youtube.com/watch?v=RkRc7TRDPDQ"
+      },
+      "height": 96,
+      "id": "47093d69-6f3c-4a87-ab02-0b23cae24dcc",
+      "pins": [
+        "af73d0c0-0d23-43b6-b0e8-effa5defbfab"
+      ],
+      "rotation": -0.441893019583517,
+      "type": "website",
+      "width": 320,
+      "x": 480.5522135612058,
+      "y": 320.28751500600237,
+      "zIndex": 89
+    },
+    "4bd34439-b2e5-4eca-b0ea-e797312ae4f4": {
+      "data": {
+        "type": "tape"
+      },
+      "height": 42,
+      "id": "4bd34439-b2e5-4eca-b0ea-e797312ae4f4",
+      "pins": [],
+      "rotation": -0.39082463084845065,
+      "type": "tape",
+      "width": 919.4809251896222,
+      "x": 522.786665708493,
+      "y": 58.36643876666491,
+      "zIndex": 73
+    },
+    "6528471b-e949-4a79-bf48-df729b529b1d": {
+      "data": {
+        "color": "#202120",
+        "fontSize": 14,
+        "text": "important",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 28.078076688621532,
+      "id": "6528471b-e949-4a79-bf48-df729b529b1d",
+      "pins": [],
+      "rotation": 0.0776332763670089,
+      "type": "sticky",
+      "width": 142.37700367557002,
+      "x": 777.4309650618061,
+      "y": 17.212484993997606,
+      "zIndex": 169
+    },
+    "6a0e053f-09e4-49ee-88b2-47fee1346b87": {
+      "data": {
+        "color": "#202120",
+        "text": "too add me, just double click the board",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 61.55395196105606,
+      "id": "6a0e053f-09e4-49ee-88b2-47fee1346b87",
+      "pins": [],
+      "rotation": -0.2820044614565569,
+      "type": "sticky",
+      "width": 167.82990192553973,
+      "x": 620.5642183631267,
+      "y": 200.2857142857143,
+      "zIndex": 116
+    },
+    "6b0421f2-9789-4e2c-9eda-f68ad50e0686": {
+      "data": {
+        "color": "#e5e8ec",
+        "text": "\n\ndo reimbursement!!!!!",
+        "type": "sticky"
+      },
+      "height": 190,
+      "id": "6b0421f2-9789-4e2c-9eda-f68ad50e0686",
+      "pins": [
+        "a2ffda02-4d37-4b91-b6c2-11910f4a0c6a"
+      ],
+      "rotation": 0.6701229055575382,
+      "type": "sticky",
+      "width": 210,
+      "x": 1344.0696278511405,
+      "y": 207.42496998799515,
+      "zIndex": 83
+    },
+    "6d29f209-5013-4846-af54-6c61dbe6dc13": {
+      "data": {
+        "color": "#202120",
+        "text": "not important",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 28,
+      "id": "6d29f209-5013-4846-af54-6c61dbe6dc13",
+      "pins": [],
+      "rotation": 0.0776332763670089,
+      "type": "sticky",
+      "width": 180,
+      "x": 775.4261631410378,
+      "y": 950.5858343337336,
+      "zIndex": 46
+    },
+    "7790ecc9-e48c-4573-9f23-f6aff876e1e1": {
+      "data": {
+        "color": "#202120",
+        "fontSize": 14,
+        "text": "not urgent",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 28.73812721133792,
+      "id": "7790ecc9-e48c-4573-9f23-f6aff876e1e1",
+      "pins": [],
+      "rotation": -0.6001301895827358,
+      "type": "sticky",
+      "width": 100,
+      "x": 462.9051547376764,
+      "y": 49.025210084033624,
+      "zIndex": 167
+    },
+    "81e868ff-9ce4-43c6-9085-f167855e9a9f": {
+      "data": {
+        "color": "#ff4fa4",
+        "text": "help yourself by dragging the stikies and pins here",
+        "type": "sticky"
+      },
+      "height": 110,
+      "id": "81e868ff-9ce4-43c6-9085-f167855e9a9f",
+      "pins": [],
+      "rotation": 0.17289733448366107,
+      "type": "sticky",
+      "width": 150,
+      "x": 127.8559423769508,
+      "y": 826.3745498199281,
+      "zIndex": 134
+    },
+    "91e1ac08-385d-409d-b1a9-8d39960022e9": {
+      "data": {
+        "type": "tape"
+      },
+      "height": 42,
+      "id": "91e1ac08-385d-409d-b1a9-8d39960022e9",
+      "pins": [],
+      "rotation": -22.437459474566264,
+      "type": "tape",
+      "width": 130.52979620022558,
+      "x": 1400.1012410313217,
+      "y": 865.2545018007204,
+      "zIndex": 127
+    },
+    "9dc871d2-1e42-4635-8abc-8719c4ac3e0f": {
+      "data": {
+        "color": "#202120",
+        "text": "double click the caption and enter yous",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 71.78603317340858,
+      "id": "9dc871d2-1e42-4635-8abc-8719c4ac3e0f",
+      "pins": [],
+      "rotation": -0.1573926092026272,
+      "type": "sticky",
+      "width": 168.47511376655626,
+      "x": 20.471011549723656,
+      "y": 296.32412965186074,
+      "zIndex": 160
+    },
+    "d7f31822-afd1-44fd-8625-886b0b5df74c": {
+      "data": {
+        "color": "#ffffff70",
+        "fontSize": 16,
+        "text": "select the photo, and press enter",
+        "type": "sticky",
+        "variant": "vellum"
+      },
+      "height": 58,
+      "id": "d7f31822-afd1-44fd-8625-886b0b5df74c",
+      "pins": [],
+      "rotation": -0.9665982071232512,
+      "type": "sticky",
+      "width": 220,
+      "x": 51.65193767850471,
+      "y": 124.05522208883544,
+      "zIndex": 172
+    },
+    "e671a029-3ab1-4c3c-ac69-cfe3cc2fe53d": {
+      "data": {
+        "color": "#8fd8f5",
+        "text": "double click the black background wall to step back",
+        "type": "sticky"
+      },
+      "height": 165,
+      "id": "e671a029-3ab1-4c3c-ac69-cfe3cc2fe53d",
+      "pins": [],
+      "rotation": -0.5939941503093564,
+      "type": "sticky",
+      "width": 190,
+      "x": 1450.7851140456185,
+      "y": 626.4945978391356,
+      "zIndex": 138
+    },
+    "f87ce73f-f7c0-49f0-96f3-157571d1e724": {
+      "data": {
+        "type": "tape"
+      },
+      "height": 42,
+      "id": "f87ce73f-f7c0-49f0-96f3-157571d1e724",
+      "pins": [],
+      "rotation": 90.32533244108488,
+      "type": "tape",
+      "width": 951.4042926883692,
+      "x": 369.6159735795662,
+      "y": 475.69447779111647,
+      "zIndex": 168
+    },
+    "fd4c8082-1fa1-40e5-9c9f-8b1382b3f3e5": {
+      "data": {
+        "color": "#202120",
+        "text": "pick me up and drag",
+        "type": "sticky",
+        "variant": "label"
+      },
+      "height": 28,
+      "id": "fd4c8082-1fa1-40e5-9c9f-8b1382b3f3e5",
+      "pins": [],
+      "rotation": 0.03910273244583573,
+      "type": "sticky",
+      "width": 180,
+      "x": 1268.823522084615,
+      "y": 951.186074429772,
+      "zIndex": 170
+    },
+    "outside": {
+      "data": {
+        "alt": "A quiet stretch of coast, with waves meeting the shore",
+        "aspectRatio": 1.5,
+        "caption": "evening tide · take the long way home",
+        "frame": "white",
+        "src": "/coast.jpg",
+        "type": "image"
+      },
+      "height": 260.92757678776695,
+      "id": "outside",
+      "pins": [
+        "pin-outside"
+      ],
+      "rotation": 0.5277992211114149,
+      "type": "image",
+      "width": 341.3913651816504,
+      "x": -49.26170468187277,
+      "y": 41.70727050711332,
+      "zIndex": 150
+    },
+    "reference": {
+      "data": {
+        "compact": true,
+        "description": "",
+        "domain": "sony.com",
+        "expandedSize": {
+          "height": 220,
+          "width": 300
+        },
+        "image": "https://www.sony.com/en/SonyInfo/design/stories/hidden_senses/img/ogp_hidden_sensese.jpg",
+        "title": "Hidden Senses",
+        "type": "website",
+        "url": "https://www.sony.com/en/SonyInfo/design/stories/hidden_senses/"
+      },
+      "height": 264.325857601994,
+      "id": "reference",
+      "pins": [
+        "pin-reference"
+      ],
+      "rotation": -0.2929091926880435,
+      "type": "website",
+      "width": 370.1605469113763,
+      "x": 400.9363745498199,
+      "y": 659.8319327731092,
+      "zIndex": 88
+    },
+    "remember": {
+      "data": {
+        "color": "#91e447",
+        "text": "go to check the calm tech related papers",
+        "type": "sticky"
+      },
+      "height": 175,
+      "id": "remember",
+      "pins": [
+        "pin-remember"
+      ],
+      "rotation": 0.5648071629844622,
+      "type": "sticky",
+      "width": 195,
+      "x": 239.42376950780283,
+      "y": 362.484993997599,
+      "zIndex": 86
+    },
+    "tracing": {
+      "data": {
+        "color": "#ffffff70",
+        "fontSize": 19,
+        "text": "catch the butterfly in your everyday life",
+        "type": "sticky",
+        "variant": "vellum"
+      },
+      "height": 66.44838085149206,
+      "id": "tracing",
+      "pins": [
+        "pin-tracing"
+      ],
+      "rotation": -3,
+      "type": "sticky",
+      "width": 261.8410044927382,
+      "x": 78.1212484993998,
+      "y": 614.0816326530617,
+      "zIndex": 85
+    },
+    "video": {
+      "data": {
+        "description": "",
+        "domain": "youtube.com",
+        "title": "YouTube video",
+        "type": "website",
+        "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+      },
+      "height": 219.0785097808198,
+      "id": "video",
+      "pins": [],
+      "rotation": 0.6169752389232104,
+      "type": "website",
+      "width": 277.90536009640067,
+      "x": 954.5498199279712,
+      "y": 612.4009603841536,
+      "zIndex": 93
+    }
+  },
+  "pins": {
+    "193a789b-e237-4395-8820-619f5e3f2f9a": {
+      "color": "#e52e35",
+      "id": "193a789b-e237-4395-8820-619f5e3f2f9a",
+      "itemId": "32b57c44-87e3-4d54-87ab-7f622c36e9c1",
+      "xRatio": 0.94,
+      "yRatio": 0.065
+    },
+    "a2ffda02-4d37-4b91-b6c2-11910f4a0c6a": {
+      "color": "#e52e35",
+      "id": "a2ffda02-4d37-4b91-b6c2-11910f4a0c6a",
+      "itemId": "6b0421f2-9789-4e2c-9eda-f68ad50e0686",
+      "xRatio": 0.48,
+      "yRatio": 0.065
+    },
+    "af73d0c0-0d23-43b6-b0e8-effa5defbfab": {
+      "color": "#e52e35",
+      "id": "af73d0c0-0d23-43b6-b0e8-effa5defbfab",
+      "itemId": "47093d69-6f3c-4a87-ab02-0b23cae24dcc",
+      "xRatio": 0.94,
+      "yRatio": 0.065
+    },
+    "pin-outside": {
+      "color": "#fff6dd",
+      "id": "pin-outside",
+      "itemId": "outside",
+      "xRatio": 0.48,
+      "yRatio": 0.065
+    },
+    "pin-reference": {
+      "color": "#e52e35",
+      "id": "pin-reference",
+      "itemId": "reference",
+      "xRatio": 0.94,
+      "yRatio": 0.065
+    },
+    "pin-remember": {
+      "color": "#e52e35",
+      "id": "pin-remember",
+      "itemId": "remember",
+      "xRatio": 0.48,
+      "yRatio": 0.065
+    },
+    "pin-tracing": {
+      "color": "#e52e35",
+      "id": "pin-tracing",
+      "itemId": "tracing",
+      "x": 1283.7935100798131,
+      "xRatio": 0.9297115143205088,
+      "y": 489.19567827130857,
+      "yRatio": 0.5189905130775474
+    }
+  }
+}

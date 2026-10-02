@@ -24,12 +24,12 @@ export function Item({ item, selected, editing, pinTarget, onPointerDown, onResi
     {data.type === 'tape' && <Tape />}
     {data.type === 'sticky' && (editing ? <textarea ref={textarea} className="note-text" value={data.text} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} onPointerDown={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onFinishEdit(); } event.stopPropagation(); }} aria-label="Note text" spellCheck={false} /> : <div ref={note} className="note-text">{data.text}</div>)}
     {data.type === 'image' && <><div className="photo-surface"><PhotoImage data={data} /><div className="photo-reflection" /></div>
-      {data.frame === 'white' && <div className="photo-caption" title="Double-click to write a caption" onPointerDown={event => event.stopPropagation()} onDoubleClick={event => { event.stopPropagation(); onEdit(); }}>
+      {data.frame === 'white' && <div className="photo-caption" onPointerDown={event => event.stopPropagation()} onDoubleClick={event => { event.stopPropagation(); onEdit(); }}>
         {editing ? <input ref={captionInput} value={data.caption ?? ''} maxLength={80} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} aria-label="Photo caption" onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === 'Escape') onFinishEdit(); }} /> : <span>{data.caption}</span>}
       </div>}</>}
     {data.type === 'image' && cropping && <CropLayer item={item} boardScale={boardScale} onApply={onCropApply} onCancel={onCropCancel} />}
     {data.type === 'website' && <WebsiteCard data={data} width={item.width} height={item.height} editing={editing} onEdit={onEdit} onText={onText} onFinishEdit={onFinishEdit} />}
-    {selected && !editing && data.type === 'tape' && (['left', 'right'] as const).map(side => <button key={side} className={`tape-length-handle ${side}`} aria-label={`Adjust tape ${side} end`} title="Drag to change length" onPointerDown={event => onResize(event, item, side)} />)}
-    {selected && !editing && !cropping && data.type !== 'tape' && <button className="resize-handle" aria-label="Resize item" title="Drag to resize" onPointerDown={event => onResize(event, item)} />}
+    {selected && !editing && data.type === 'tape' && (['left', 'right'] as const).map(side => <button key={side} className={`tape-length-handle ${side}`} aria-label={`Adjust tape ${side} end`} onPointerDown={event => onResize(event, item, side)} />)}
+    {selected && !editing && !cropping && data.type !== 'tape' && <button className="resize-handle" aria-label="Resize item" onPointerDown={event => onResize(event, item)} />}
   </article>;
 }

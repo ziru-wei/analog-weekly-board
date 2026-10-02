@@ -2,6 +2,31 @@
 
 ## 0.1.2
 
+- Duplicate board items with Option/Alt-drag or Command/Ctrl+C and V, preserving content and attached pins with independent IDs and single-step undo.
+
+- Toggle tracing-paper and black labels with Enter, measuring their content in the destination font to fit narrower paper or longer strips.
+
+- Use the authored localhost board as the first-use layout, preserving all 22 elements, seven pins and two strings. Existing boards are preserved.
+- Shift-click to select or deselect multiple items; move, Option-drag, copy/paste and delete the group together, preserving relative positions and internal strings.
+
+- Animate tracing-paper growth and its release onto the board, respecting reduced motion.
+- Remove hover tooltips and bottom shortcut hints. Use a smaller 300 × 220 ordinary website preset, omit description subtitles, and let preview images fill remaining space.
+
+- Preserve the perforated paper shape in compact website cards, with a vertical divider, shared typography and text-only domain links with hover feedback.
+
+- Check and request missing Firefox host permissions before creating YouTube frames, including extension upgrades.
+- Add a red pin at the upper-right corner of every newly pasted website card, including YouTube and social posts.
+- Show video and social-post markers in static Dashboard thumbnails.
+- Add website title/image previews and Instagram/X embeds; preserve Xiaohongshu share tokens and show a fallback for login-required notes.
+- Toggle selected website cards between expanded and thumbnail-left compact layouts with Enter; restore prior dimensions and switch layouts automatically in both resize directions.
+- Allow all website cards to shrink to 150 × 76 board units with responsive content.
+
+- Embed YouTube videos inside website clippings automatically, with support for common video URL formats and start timestamps.
+- Use compact 16:9 video cards, fetch video titles, fit existing links automatically, and retain an Open on YouTube fallback.
+- Show a dark loading screen until board fonts, images, tray and player frames settle, with a timeout for unavailable resources.
+- Identify extension-initiated player requests for YouTube playback; document the added player host permission and network behavior.
+
+- Add Option + . on macOS (Alt + . elsewhere) to open or focus the Firefox extension's board.
 - Keep placed pins, supply pins, and dragged pin previews above vellum and other board items.
 - Open Dashboard boards with a double-click; retain keyboard activation.
 - Clip thumbnail content to rounded corners and draw hover feedback inside a separate frame.
