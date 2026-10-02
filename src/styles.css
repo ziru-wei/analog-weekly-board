@@ -16,7 +16,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #d9c79b; outline-offs
 .panel-joint { position: absolute; top: 0; bottom: 0; left: calc(50% - 3px); width: 7px; pointer-events: none; background: linear-gradient(90deg, #51301e1f, #57311d46 2px, #3d211461 3px, #4c2d1c24 4px, #d3996661 5px, transparent 7px); opacity: .8; }
 .items-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .items-layer > * { pointer-events: auto; }
-.pins-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.pins-layer { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .pins-layer > * { pointer-events: auto; }
 .board-item { position: absolute; cursor: grab; touch-action: none; user-select: none; background: var(--paper); box-shadow: 0 .5px 1px #28140870, 0 calc(var(--lift) * .6) calc(var(--lift) * 1.6) #28140850, 0 calc(var(--lift) * 2) calc(var(--lift) * 4.5) #28140830; }
 .board-item:before { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, #fffdf512, transparent 50%, rgb(96 72 45 / var(--shade))); pointer-events: none; z-index: 1; }
@@ -78,9 +78,9 @@ textarea.note-text { cursor: text; user-select: text; overflow: auto; }
 .note-stack-sheet:nth-child(2) { transform: translate(-3px, 4px) rotate(-2deg); background: #ffad70; }
 .note-stack-sheet:nth-child(3) { transform: translate(2px, 2px) rotate(.8deg); background: #8fd8f5; }
 .note-stack-sheet:nth-child(4) { background-image: linear-gradient(#ffffff16, transparent 25%, #34251509); }
-.pin-supply { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.pin-supply { position: absolute; inset: 0; pointer-events: none; z-index: 8; }
 .pin-supply .pin { pointer-events: auto; cursor: grab; }
-.pin-preview { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.pin-preview { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
 .pin-preview .pin { pointer-events: none; }
 
 .note-stack-clip { position: absolute; left: -60px; top: -49px; width: 77px; height: 154px; z-index: 2; pointer-events: none; }

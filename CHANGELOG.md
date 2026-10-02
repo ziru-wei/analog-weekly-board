@@ -2,6 +2,10 @@
 
 ## 0.1.2
 
+- Keep placed pins, supply pins, and dragged pin previews above vellum and other board items.
+- Open Dashboard boards with a double-click; retain keyboard activation.
+- Clip thumbnail content to rounded corners and draw hover feedback inside a separate frame.
+
 - Show elapsed sync time on the board and below the Dashboard profile avatar.
 - Move account details and sync/sign-out actions into an avatar dropdown.
 - Simplify Dashboard thumbnails to text bars and flat blue tape; defer offscreen rendering.

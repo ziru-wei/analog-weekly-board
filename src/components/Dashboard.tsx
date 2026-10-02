@@ -38,12 +38,12 @@ export function Dashboard({ archives, conflicts, current, onResolve, onClose }: 
     </header>
 
     <div className="dash-grid">
-      <button className="dash-card current" onClick={onClose}>
-        <BoardPreview doc={current.doc} className="dash-thumb" simplified />
+      <button className="dash-card current" title="Double-click to open this week" onDoubleClick={onClose} onClick={event => { if (event.detail === 0) onClose(); }}>
+        <span className="dash-thumb-frame"><BoardPreview doc={current.doc} className="dash-thumb" simplified /></span>
         <span className="dash-meta"><b>This week</b><i>{weekLabel(current.weekStart, current.startedOn, currentEnd)}</i><em>In progress</em></span>
       </button>
-      {sorted.map(a => <button key={a.id} className="dash-card" onClick={() => setOpen(a)}>
-        <BoardPreview doc={a.doc} className="dash-thumb" simplified />
+      {sorted.map(a => <button key={a.id} className="dash-card" title="Double-click to open archive" onDoubleClick={() => setOpen(a)} onClick={event => { if (event.detail === 0) setOpen(a); }}>
+        <span className="dash-thumb-frame"><BoardPreview doc={a.doc} className="dash-thumb" simplified /></span>
         <span className="dash-meta"><b>{weekLabel(a.weekStart, a.startedOn, a.weekEnd)}</b><i>{countItems(a.doc)} {countItems(a.doc) === 1 ? 'item' : 'items'}</i>{isPartial(a.weekStart, a.startedOn) && <em>Partial week</em>}</span>
       </button>)}
     </div>
@@ -53,7 +53,7 @@ export function Dashboard({ archives, conflicts, current, onResolve, onClose }: 
       <div className="dash-grid">{conflicts.map(c => {
         const sameWeek = c.weekStart === current.weekStart, canArchive = !archives.some(a => a.weekStart === c.weekStart);
         return <div key={c.id} className="dash-card conflict">
-          <BoardPreview doc={c.doc} className="dash-thumb" simplified />
+          <span className="dash-thumb-frame"><BoardPreview doc={c.doc} className="dash-thumb" simplified /></span>
           <span className="dash-meta"><b>{weekLabel(c.weekStart, c.startedOn)}</b><i>Saved {new Date(c.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</i></span>
           <span className="dash-conflict-actions">
             {sameWeek ? <button onClick={() => { if (window.confirm('Replace this week\'s board with this copy?')) onResolve(c.id, 'current'); }}>Make current</button>

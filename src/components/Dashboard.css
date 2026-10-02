@@ -7,10 +7,12 @@
 .dash-back kbd { font: 500 11px 'DM Sans', sans-serif; padding: 2px 6px; border-radius: 4px; background: #191a18; color: #8f8b80; }
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 24px; }
 .dash-card { display: flex; flex-direction: column; gap: 12px; padding: 0; text-align: left; }
-.dash-thumb { display: block; width: 100%; aspect-ratio: 16 / 10; border-radius: 4px; background: #875f3d; box-shadow: 0 1px 0 #b58c5e, 0 2px 0 #8a6538, 0 3px 0 #5b3f22, 0 5px 3px #0006, 0 12px 20px #00000059; }
-.dash-card:hover .dash-thumb { box-shadow: 0 1px 0 #c79d6c, 0 2px 0 #9a7444, 0 3px 0 #66482a, 0 5px 3px #0006, 0 12px 20px #00000059, 0 0 0 2px #d9c79b; }
+.dash-thumb-frame { display: block; position: relative; width: 100%; aspect-ratio: 16 / 10; border-radius: 4px; background: #875f3d; box-shadow: 0 1px 0 #b58c5e, 0 2px 0 #8a6538, 0 3px 0 #5b3f22, 0 5px 3px #0006, 0 12px 20px #00000059; }
+.dash-thumb { display: block; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; clip-path: inset(0 round 4px); }
+.dash-thumb-frame::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px transparent; }
+button.dash-card:hover .dash-thumb-frame::after { box-shadow: inset 0 0 0 2px #b9a77d; }
 .dash-card:focus-visible { outline: none; }
-.dash-card:focus-visible .dash-thumb { outline: 2px solid #d9c79b; outline-offset: 3px; }
+.dash-card:focus-visible .dash-thumb-frame { outline: 2px solid #d9c79b; outline-offset: 3px; }
 .dash-meta { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 4px 2px 0; font-size: 13px; }
 .dash-meta b { font-weight: 600; color: #ece6d9; }
 .dash-meta i { font-style: normal; color: #8f8b80; }
