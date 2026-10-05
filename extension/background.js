@@ -1,13 +1,7 @@
 // Toolbar button and Firefox's _execute_action shortcut share the same open/focus behavior.
 const api = globalThis.browser ?? globalThis.chrome;
-api.action.onClicked.addListener(async () => {
-  const url = api.runtime.getURL('index.html');
-  const [existing] = await api.tabs.query({ url });
-  if (existing) {
-    await api.tabs.update(existing.id, { active: true });
-    await api.windows.update(existing.windowId, { focused: true });
-  } else await api.tabs.create({ url });
-});
+// Each open starts a fresh tab; the old board tab saves and closes itself when the new one loads.
+api.action.onClicked.addListener(() => api.tabs.create({ url: api.runtime.getURL('index.html') }));
 
 // YouTube requires a client Referer; extension schemes do not supply an HTTPS one.
 // This rule identifies our app only on player frames initiated by our own extension.

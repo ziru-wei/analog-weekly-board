@@ -12,8 +12,9 @@ import { boardCenter, wheelPixels } from './boardView';
 import { SyncStatus } from './components/SyncStatus';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
-import { type WeekState, acknowledgeUpload, archiveOf, newRev, rollover, saveWeekState } from './weeks';
-import { writeCurrent } from './storage';
+import { type WeekState, DASHBOARD_OPEN_KEY, acknowledgeUpload, activeBoard, addBoard, deleteBoard, newRev, openBoard, resolveBoardConflict, rollover, saveWeekState } from './weeks';
+import { writeBoard, writeKv } from './storage';
+import { onRetire, useRetired } from './singleTab';
 import { cloud, useCloud } from './cloud/sync';
 import { type BoardItem, type Pin as PinModel, type Point, clamp, localPoint, photoMargins, pinPosition, pinConnectionTarget } from './model';
 import { createDocumentStore, useDocument } from './store';
@@ -40,9 +41,9 @@ let initialWeek: WeekState;
 let store: ReturnType<typeof createDocumentStore>;
 let commands: ReturnType<typeof createDocumentStore>['commands'];
 /** Called once from main.tsx, after the saved week state has been read from IndexedDB. */
-export function initApp(week: WeekState) { initialWeek = week; store = createDocumentStore(week.current.doc); commands = store.commands; }
+export function initApp(week: WeekState) { initialWeek = week; store = createDocumentStore(activeBoard(week).doc); commands = store.commands; }
 const HOLD_MS = 480;
-type Selection = { type: 'item' | 'pin' | 'rope'; id: string; ids?: string[] } | null;
+type Selection = { type: 'item' | 'pin' | 'rope'; id: string; ids?: string[]; pinIds?: string[] } | null;
 type Gesture =
   | { kind: 'drag' | 'resize'; start: Point; item: BoardItem; moved: boolean; side?: 'left' | 'right'; duplicate?: boolean; items?: BoardItem[] }
   | { kind: 'pin'; start: Point; pin: PinModel; mode: 'pending' | 'connect' | 'move'; moved: boolean; target?: string }
@@ -65,37 +66,47 @@ export default function App() {
   const [selection, setSelection] = useState<Selection>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [palette, setPalette] = useState<Palette>(null);
-  const [weeks, setWeeks] = useState<WeekState>(initialWeek);
+  const [, setWeeks] = useState<WeekState>(initialWeek);
   const cloudState = useCloud();
   const [dashboard, setDashboard] = useState(false);
+  const retired = useRetired();
+  useEffect(() => { void writeKv(DASHBOARD_OPEN_KEY, dashboard).catch(() => {}); }, [dashboard]);
   const [lightbox, setLightbox] = useState<{ id: string; from: Point } | null>(null);
   const [cropping, setCropping] = useState<string | null>(null);
-  const weeksRef = useRef(weeks);
+  const weeksRef = useRef(initialWeek);
   const dashboardRef = useRef(false); dashboardRef.current = dashboard || !!lightbox || !!cropping; // any full-screen layer owns the keyboard
   const replacing = useRef(false);
-  const liveState = (): WeekState => { const w = weeksRef.current; return { ...w, current: { ...w.current, doc: store.getSnapshot() } }; };
-  // Replace the whole board (new week, or newer data arriving from another device).
-  const commit = (next: WeekState, replaceBoard: boolean) => {
+  const liveState = (): WeekState => {
+    const w = weeksRef.current, doc = store.getSnapshot();
+    return activeBoard(w).doc === doc ? w : { ...w, boards: w.boards.map(b => b.id === w.activeId ? { ...b, doc } : b) };
+  };
+  // Adopt a new state; when the open board changed (another board opened, a new week, or newer data from another device), load it.
+  const commit = (next: WeekState) => {
+    const replaceBoard = activeBoard(next).doc !== store.getSnapshot();
     weeksRef.current = next; setWeeks(next);
-    if (replaceBoard) { replacing.current = true; store.commands.load(next.current.doc); replacing.current = false; setSelection(null); setEditing(null); setPalette(null); }
+    if (replaceBoard) { replacing.current = true; store.commands.load(activeBoard(next).doc); replacing.current = false; setSelection(null); setEditing(null); setPalette(null); setCropping(null); setLightbox(null); }
     void saveWeekState(next);
   };
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const flush = () => { void writeCurrent(liveState().current); };
+    const flush = () => { void writeBoard(activeBoard(liveState())); };
     const unsubscribe = store.subscribe(() => {
       if (replacing.current) return;
-      const doc = store.getSnapshot();
-      if (doc === weeksRef.current.current.doc) return;
-      weeksRef.current = { ...weeksRef.current, current: { ...weeksRef.current.current, doc, updatedAt: Date.now(), rev: newRev() } };
+      const doc = store.getSnapshot(), w = weeksRef.current;
+      if (doc === activeBoard(w).doc) return;
+      weeksRef.current = { ...w, boards: w.boards.map(b => b.id === w.activeId ? { ...b, doc, updatedAt: Date.now(), rev: newRev() } : b) };
       clearTimeout(timer); timer = setTimeout(flush, 400); cloud.changed();
     });
     cloud.attach({
       getState: liveState,
-      apply: next => commit(next, next.current.rev !== weeksRef.current.current.rev),
-      markSynced: uploaded => { weeksRef.current = acknowledgeUpload(liveState(), uploaded); void writeCurrent(liveState().current); },
+      apply: commit,
+      markSynced: uploaded => {
+        weeksRef.current = acknowledgeUpload(liveState(), uploaded);
+        const board = weeksRef.current.boards.find(b => b.id === uploaded.id); if (board) void writeBoard(board);
+      },
     });
     void cloud.resume();
+    onRetire(async () => { cloud.detach(); clearTimeout(timer); await saveWeekState(liveState()); });
     window.addEventListener('pagehide', flush);
     return () => { unsubscribe(); clearTimeout(timer); window.removeEventListener('pagehide', flush); flush(); };
   }, []);
@@ -109,16 +120,13 @@ export default function App() {
     const el = window.document.querySelector(`[data-item-id="${item.id}"]`), r = el?.getBoundingClientRect();
     setLightbox({ id: item.id, from: r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: size.width / 2, y: size.height / 2 } });
   };
-  // Conflict copies: bring one back as the live board (same week), restore it as an archive, or throw it away.
-  const resolveConflict = (id: string, action: 'current' | 'archive' | 'discard') => {
-    const w = liveState(), copy = w.conflicts.find(c => c.id === id); if (!copy) return;
-    const conflicts = w.conflicts.filter(c => c.id !== id);
-    if (action === 'current' && copy.weekStart === w.current.weekStart) commit({ ...w, conflicts, current: { ...w.current, doc: copy.doc, updatedAt: Date.now(), rev: newRev() } }, true);
-    else if (action === 'archive' && !w.archives.some(a => a.weekStart === copy.weekStart)) commit({ ...w, conflicts, archives: [...w.archives, archiveOf({ weekStart: copy.weekStart, startedOn: copy.startedOn, updatedAt: Date.now(), rev: newRev(), baseRev: '', doc: copy.doc })] }, false);
-    else if (action === 'discard') commit({ ...w, conflicts }, false);
-    else return;
+  // Resolve a divergent version in place, keeping exactly one version of its board.
+  const resolveConflict = (id: string, action: 'restore' | 'discard') => {
+    const w = liveState(); if (!w.conflicts.some(c => c.id === id)) return;
+    commit(resolveBoardConflict(w, id, action));
     void cloud.discardConflict(id); cloud.changed();
   };
+  const changeBoards = (next: WeekState, synced = true) => { if (next !== weeksRef.current) { commit(next); if (synced) cloud.changed(); } };
   // Pull other devices' changes when the tab regains focus, and every few minutes while it stays open.
   useEffect(() => {
     const pull = () => { if (!window.document.hidden) void cloud.syncNow(); };
@@ -126,12 +134,12 @@ export default function App() {
     window.document.addEventListener('visibilitychange', pull);
     return () => { clearInterval(timer); window.document.removeEventListener('visibilitychange', pull); };
   }, []);
-  // When Monday arrives the finished week is archived and a fresh board replaces it.
+  // When a new week begins, its fresh board is opened; earlier boards stay in the Dashboard.
   useEffect(() => {
     const check = () => {
       const live = liveState(), next = rollover(live);
       if (next === live) return;
-      commit(next, true); cloud.changed();
+      commit(next); cloud.changed();
     };
     const timer = setInterval(check, 30_000);
     window.document.addEventListener('visibilitychange', check);
@@ -190,7 +198,7 @@ export default function App() {
   const travelHistory = (redo: boolean) => { finishEdit(); cancelGesture(); if (redo) commands.redo(); else commands.undo(); setSelection(null); };
   const removeSelection = () => {
     if (!selection) return;
-    if (selection.type === 'item') { commands.beginTransaction(); for (const id of selection.ids ?? [selection.id]) commands.deleteItem(id); commands.finishTransaction(); }
+    if (selection.type === 'item') { commands.beginTransaction(); for (const id of selection.ids ?? [selection.id]) commands.deleteItem(id); for (const id of selection.pinIds ?? []) if (store.getSnapshot().pins[id]) commands.deletePin(id); commands.finishTransaction(); }
     else if (selection.type === 'pin') commands.deletePin(selection.id);
     else commands.deleteConnection(selection.id);
     setSelection(null); setPalette(null);
@@ -386,8 +394,8 @@ export default function App() {
       if (target.closest('input, textarea, [contenteditable="true"]') && !(target.hasAttribute('data-quick-label') && !(target as HTMLTextAreaElement).value)) return;
       const snapshot = store.getSnapshot();
       const items = (selection.ids ?? [selection.id]).map(id => snapshot.items[id]).filter(Boolean);
-      if (!items.length) return;
-      const pinIds = new Set(items.flatMap(item => item.pins));
+      const pinIds = new Set([...items.flatMap(item => item.pins), ...(selection.pinIds ?? [])]);
+      if (!items.length && !pinIds.size) return;
       const pins = Object.values(snapshot.pins).filter(pin => pinIds.has(pin.id));
       const connections = Object.fromEntries(Object.entries(snapshot.connections).filter(([, c]) => pinIds.has(c.fromPinId) && pinIds.has(c.toPinId)));
       const encoded = encodeBoardGroup(items, pins, connections);
@@ -401,9 +409,11 @@ export default function App() {
       const copied = readBoardGroup(event.clipboardData?.getData(BOARD_CLIPBOARD_TYPE) || event.clipboardData?.getData('text/plain') || '');
       if (copied) {
         event.preventDefault(); finishEdit();
-        const ids = commands.duplicateItems(copied.items, copied.pins, copied.connections);
+        const beforePins = new Set(Object.keys(store.getSnapshot().pins));
+        const ids = commands.duplicateItems(copied.items, copied.pins, copied.connections, { x: 0, y: 0 }, true);
+        const pinIds = Object.keys(store.getSnapshot().pins).filter(id => !beforePins.has(id));
         sound.play('paper');
-        setSelection({ type: 'item', id: ids[0], ids }); return;
+        setSelection({ type: 'item', id: ids[0] ?? '', ids, pinIds }); return;
       }
       const files = Array.from(event.clipboardData?.items ?? []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter((file): file is File => !!file);
       if (files.length) { event.preventDefault(); finishEdit(); void pasteImages(files); return; }
@@ -436,7 +446,14 @@ export default function App() {
         return;
       }
       if ((event.target as HTMLElement).closest('input, textarea, [contenteditable="true"]') && !((event.target as HTMLTextAreaElement).hasAttribute('data-quick-label') && !(event.target as HTMLTextAreaElement).value)) return;
-      const selected = selection?.type === 'item' && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && !event.altKey && !gesture.current && !editing) {
+        event.preventDefault();
+        const snapshot = store.getSnapshot(), ids = Object.keys(snapshot.items), pinIds = Object.keys(snapshot.pins);
+        setPalette(null); setTapeHeld(false);
+        setSelection(ids.length || pinIds.length ? { type: 'item', id: ids[0] ?? '', ids, pinIds } : null);
+        return;
+      }
+      const selected = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
       if (selected?.data.type === 'sticky' && selected.data.variant && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
         if (!event.repeat) { const patch = toggleLabel(selected); if (patch) { commands.updateItem(selected.id, patch); if (patch.data?.type === 'sticky' && patch.data.variant === 'label') sound.play('label'); } }
@@ -525,7 +542,7 @@ export default function App() {
     transformOrigin: '0 50%', transform: `rotate(${Math.atan2(tapePreview.end.y - tapePreview.start.y, tapePreview.end.x - tapePreview.start.x) * 180 / Math.PI}deg)`,
   } : undefined;
   const renderItem = (item: BoardItem) => <Item key={item.id} item={item} pinTarget={pinDropTarget === item.id} selected={selection?.type === 'item' && (selection.ids ?? [selection.id]).includes(item.id)} editing={editing === item.id}
-            webInteractive={selection?.type === 'item' && selection.id === item.id && (selection.ids?.length ?? 1) === 1 && !activeGesture && !panning}
+            webInteractive={selection?.type === 'item' && selection.id === item.id && !selection.pinIds && (selection.ids?.length ?? 1) === 1 && !activeGesture && !panning}
             onAddPin={(event, target) => { finishEdit(); const p = localPoint(point(event), target); commands.createPin(target.id, p.x / target.width, p.y / target.height); sound.play('pin'); }}
             cropping={cropping === item.id} boardScale={scale} onCropCancel={() => setCropping(null)}
             onCropApply={patch => { commands.beginTransaction(); commands.updateItem(item.id, patch); commands.finishTransaction(); setCropping(null); }}
@@ -541,7 +558,7 @@ export default function App() {
             }}
             onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); setPalette(target.data.type === 'sticky' && !target.data.variant ? { type: 'paper', id: target.id } : null); }}
             onText={text => { if (item.data.type === 'sticky') { const data = { ...item.data, text }; commands.updateItem(item.id, { data, ...(data.variant ? measureLabel(data, document.board) : {}) }); } else if (item.data.type === 'image') commands.updateItem(item.id, { data: { ...item.data, caption: text } }); else if (item.data.type === 'website') commands.updateItem(item.id, { data: { ...item.data, title: text } }); }} />;
-  const hintItem = selection?.type === 'item' ? document.items[selection.id] : undefined;
+  const hintItem = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
   return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''} ${canvasReady ? '' : 'canvas-loading'}`} aria-busy={!canvasReady}>
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
     <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
@@ -594,9 +611,9 @@ export default function App() {
             setTapeHeld(held => !held);
           }} />
           {tapeGeometry && <div className="tape-preview" style={tapeGeometry}><Tape /></div>}
-          <Ropes document={document} selected={selection?.type === 'rope' ? selection.id : undefined} temporary={temporary} onSelect={id => { finishEdit(); setPalette(null); setSelection({ type: 'rope', id }); sound.play('pluck'); }} />
+          <Ropes document={document} selected={selection?.type === 'rope' ? selection.id : undefined} selectedPins={selection?.type === 'item' ? selection.pinIds : undefined} temporary={temporary} onSelect={id => { finishEdit(); setPalette(null); setSelection({ type: 'rope', id }); sound.play('pluck'); }} />
           {pinPreview && <div className="pin-preview"><Pin decorative center={lightingCenter} pin={{ id: 'preview', itemId: null, xRatio: 0, yRatio: 0, color: pinPreview.color }} position={pinPreview.position} moving connecting={false} onPointerDown={() => {}} onPalette={() => {}} /></div>}
-          <div className="pins-layer">{Object.values(document.pins).sort((a, b) => (a.itemId ? document.items[a.itemId].zIndex : 0) - (b.itemId ? document.items[b.itemId].zIndex : 0)).map(pin => <Pin key={pin.id} center={lightingCenter} pin={pin} position={pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined)} moving={movingPin === pin.id} connecting={temporary?.target === pin.id} onPointerDown={pinDown} onPalette={pin => { finishEdit(); cancelGesture(); setPalette({ type: 'pin', id: pin.id }); }} />)}</div>
+          <div className="pins-layer">{Object.values(document.pins).sort((a, b) => (a.itemId ? document.items[a.itemId].zIndex : 0) - (b.itemId ? document.items[b.itemId].zIndex : 0)).map(pin => <Pin key={pin.id} center={lightingCenter} pin={pin} position={pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined)} selected={selection?.type === 'item' && !!selection.pinIds?.includes(pin.id)} moving={movingPin === pin.id} connecting={temporary?.target === pin.id} onPointerDown={pinDown} onPalette={pin => { finishEdit(); cancelGesture(); setPalette({ type: 'pin', id: pin.id }); }} />)}</div>
         </div>
       </div>
     </main>
@@ -628,11 +645,15 @@ export default function App() {
         : hintItem?.data.type === 'image' ? <><b>enter</b> frame · <b>space</b> enlarge · <b>double-click</b> crop</>
         : hintItem?.data.type === 'website' ? <><b>enter</b> compact / expand · <b>double-click title</b> edit · <b>esc</b> deactivate</>
         : hintItem?.data.type === 'sticky' && hintItem.data.variant ? <><b>enter</b> change label · <b>double-click</b> edit</>
+        : selection?.type === 'item' && selection.pinIds ? <><b>⌘C</b> copy · <b>⌘V</b> paste on another board · <b>delete</b> remove · <b>esc</b> deselect</>
         : selection ? <><b>delete</b> remove · <b>esc</b> deselect</>
         : <><b>pinch</b> zoom · <b>scroll</b> pan · <b>double-click outside</b> dashboard</>}
     </p>}
 
-    {dashboard && <Dashboard archives={weeks.archives} conflicts={weeks.conflicts} onResolve={resolveConflict} current={{ ...weeks.current, doc: store.getSnapshot() }} onClose={() => setDashboard(false)} />}
+    {dashboard && <Dashboard state={liveState()} onResolve={resolveConflict} onClose={() => setDashboard(false)}
+      onOpen={id => { changeBoards(openBoard(liveState(), id), false); setDashboard(false); }}
+      onAdd={() => { changeBoards(addBoard(liveState())); setDashboard(false); sound.play('paper'); }}
+      onDelete={id => changeBoards(deleteBoard(liveState(), id))} />}
     <div className="board-status">
       <button className="board-sound-toggle" onClick={toggleSound} aria-label="Board sound effects" aria-pressed={soundEnabled} title={soundEnabled ? 'Mute board sounds' : 'Enable board sounds'}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -646,5 +667,6 @@ export default function App() {
       x={clamp(palettePos.x, 116, size.width - 116)} y={clamp(palettePos.y + 16, 14, size.height - 64)}
       onChange={color => { if (palettePin) commands.updatePin(palettePin.id, { color }); else if (paletteItem?.data.type === 'sticky') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, color } }); setPalette(null); }} />}
     {notice && <div className="toast" role="status">{notice}</div>}
+    {retired && <div className="retired-overlay" role="alert">Weekly Board is open in another tab.</div>}
   </div>;
 }

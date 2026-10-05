@@ -3,7 +3,8 @@
 @font-face { font-family: 'Board Chinese'; src: url('/fonts/LXGWWenKai-Medium.subset.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
 :root { font-family: 'Board English', 'Board Chinese', sans-serif; color: #d1ccc2; background: #191a18; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
-body { margin: 0; overflow: hidden; }
+/* Chrome injects system-ui fonts into extension pages' body; keep the board's own fonts. */
+html body { margin: 0; overflow: hidden; font-family: inherit; font-size: inherit; line-height: inherit; }
 button, input, textarea { font: inherit; }
 button { color: inherit; cursor: pointer; border: 0; background: none; }
 button:focus-visible, a:focus-visible { outline: 2px solid #d9c79b; outline-offset: 4px; }
@@ -169,3 +170,7 @@ textarea.note-text { cursor: text; user-select: text; overflow: auto; }
 
 .youtube-player, .bilibili-player { position: relative; overflow: hidden; }
 .youtube-viewport, .bilibili-viewport { position: absolute; left: 50%; top: 50%; transform-origin: center; }
+
+.pin.group-selected { outline: 1px solid #d9c79b; outline-offset: 2px; }
+
+.retired-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; font-size: 14px; color: #d1ccc2; background: #191a18f2; }

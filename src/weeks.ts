@@ -1,37 +1,36 @@
 import { createDemo } from './demo';
 import type { BoardDocument } from './model';
-import { readStored, writeArchives, writeConflicts, writeCurrent } from './storage';
+import { type LegacyCurrent, type StoredBoard, readStored, writeBoards, writeConflicts, writeMeta } from './storage';
 import { equivalentBoards } from './cloud/equivalence';
 import { getWeekPreference, loadWeekPreference } from './weekPreferences';
 
 // Weeks use the selected starting weekday in local time (Monday by default).
-export interface Archive {
-  id: string;
-  weekStart: string; // YYYY-MM-DD
-  weekEnd: string; // inclusive, YYYY-MM-DD
-  startedOn: string; // first day the board was used this week; later than weekStart for a partial week
-  archivedAt: string;
-  /** When the board's content last changed (ms). */
-  updatedAt: number;
-  /** Version id of the content; two copies with the same `rev` are identical. */
-  rev: string;
-  doc: BoardDocument;
-}
 /**
- * The live board. `rev` identifies this exact content; `baseRev` is the cloud version it was last in sync with.
+ * One corkboard. A week has one or more boards; any of them can be opened for editing.
+ * `rev` identifies this exact content; `baseRev` is the cloud version it was last in sync with ('' = never synced).
  * `rev !== baseRev` means there are local edits the cloud hasn't seen. `updatedAt` is 0 for a pristine board.
  */
-export interface CurrentWeek { weekStart: string; startedOn: string; updatedAt: number; rev: string; baseRev: string; doc: BoardDocument }
-/** A board version set aside instead of overwriting someone's work (two devices edited the same week offline). */
-export interface ConflictCopy { id: string; createdAt: number; weekStart: string; startedOn: string; kind: 'week' | 'archive'; doc: BoardDocument }
-export interface WeekState { v: 1; current: CurrentWeek; archives: Archive[]; conflicts: ConflictCopy[] }
-
-/** A successful upload advances the base even when editing continued during the request. */
-export function acknowledgeUpload(state: WeekState, uploaded: CurrentWeek): WeekState {
-  const current = state.current;
-  if (current.weekStart !== uploaded.weekStart || (current.baseRev !== uploaded.baseRev && current.rev !== uploaded.rev)) return state;
-  return { ...state, current: { ...current, baseRev: uploaded.rev } };
+export interface Board {
+  id: string;
+  weekStart: string; // YYYY-MM-DD
+  startedOn: string; // first day the board was used; later than weekStart for a partial week
+  /** Inclusive last day, stored only by boards archived before multiple boards existed. */
+  weekEnd?: string;
+  createdAt: number;
+  updatedAt: number;
+  rev: string;
+  baseRev: string;
+  doc: BoardDocument;
 }
+/** A deleted board. Kept (locally and as the board's cloud file) so another device cannot bring the board back. */
+export interface Tombstone { id: string; deleted: true; deletedAt: number }
+/** A board version set aside instead of overwriting someone's work (two devices edited the same board offline). */
+export interface ConflictCopy { id: string; sourceBoardId?: string; createdAt: number; weekStart: string; startedOn: string; doc: BoardDocument }
+/**
+ * `week` is the week this device last rolled over to; `activeId` is the board open on this device (never synced).
+ * `deleted` maps deleted board ids to their deletion time.
+ */
+export interface WeekState { v: 2; week: string; activeId: string; boards: Board[]; deleted: Record<string, number>; conflicts: ConflictCopy[]; resolvedConflicts?: string[] }
 
 const LEGACY_KEY = 'analog-weekly-board:v1';
 export const newRev = () => crypto.randomUUID();
@@ -39,9 +38,22 @@ export const newRev = () => crypto.randomUUID();
 const pad = (n: number) => String(n).padStart(2, '0');
 export const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const fromISO = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
-export const mondayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+export const addDays = (iso: string, days: number) => { const d = fromISO(iso); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)); };
 export const weekStartISO = (d: Date, day = getWeekPreference().day) => toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - day + 7) % 7)));
-export const weekEndISO = (weekStart: string) => { const d = fromISO(weekStart); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 6)); };
+export const weekEndISO = (weekStart: string) => addDays(weekStart, 6);
+/**
+ * A week runs until the next week begins. When the starting weekday changes, the week before the change is shorter
+ * or longer than seven days (it lasts until the new weekday). A gap of a week or more means no board was made then.
+ */
+export function weekEndOf(weekStart: string, weekStarts: Iterable<string>, effectiveFrom = getWeekPreference().effectiveFrom) {
+  const next = [...weekStarts, ...(effectiveFrom ? [effectiveFrom] : [])].filter(s => s > weekStart).sort()[0];
+  return next && next <= addDays(weekStart, 13) ? addDays(next, -1) : weekEndISO(weekStart);
+}
+/** The month a week is listed under: the one holding most of the days it shows. */
+export function weekMonth(from: string, end: string) {
+  const days = Math.round((fromISO(end).getTime() - fromISO(from).getTime()) / 86_400_000);
+  return addDays(from, Math.floor(days / 2)).slice(0, 7);
+}
 
 const fmt = (iso: string, withYear: boolean) => fromISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
 export function weekLabel(weekStart: string, startedOn = weekStart, end = weekEndISO(weekStart)) {
@@ -54,100 +66,172 @@ export function emptyBoard(weekStart: string): BoardDocument {
   return { board: { id: `week-${weekStart}`, title: weekLabel(weekStart), width: 1600, height: 1000 }, items: {}, pins: {}, connections: {} };
 }
 export const isEmpty = (doc: BoardDocument) => Object.keys(doc.items).length === 0 && Object.keys(doc.pins).length === 0;
-const freshCurrent = (weekStart: string, startedOn: string, doc: BoardDocument): CurrentWeek => { const rev = newRev(); return { weekStart, startedOn, updatedAt: 0, rev, baseRev: rev, doc }; };
+/** The board every week starts with. Its id is shared by all devices, so their automatic boards merge into one. */
+export const weeklyBoardId = (weekStart: string) => `week-${weekStart}`;
+export function newBoard(weekStart: string, now = new Date(), doc = emptyBoard(weekStart), id = `board-${crypto.randomUUID()}`): Board {
+  const rev = newRev(), today = toISO(now);
+  return { id, weekStart, startedOn: today > weekStart ? today : weekStart, createdAt: now.getTime(), updatedAt: 0, rev, baseRev: rev, doc };
+}
 
-export const archiveOf = (current: CurrentWeek, now = new Date()): Archive => ({
-  id: `archive-${current.weekStart}`, weekStart: current.weekStart, weekEnd: weekEndISO(current.weekStart),
-  startedOn: current.startedOn, archivedAt: now.toISOString(), updatedAt: current.updatedAt, rev: current.rev, doc: current.doc,
-});
+export const activeBoard = (state: WeekState) => state.boards.find(b => b.id === state.activeId)!;
+const byCreation = (a: Board, b: Board) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);
+/** Keep `activeId` pointing at a real board: prefer the newest board of the current week, then the newest week. */
+function ensureActive(state: WeekState, now: Date): WeekState {
+  if (state.boards.some(b => b.id === state.activeId)) return state;
+  const thisWeek = state.boards.filter(b => b.weekStart === state.week).sort(byCreation);
+  const fallback = thisWeek.at(-1) ?? [...state.boards].sort((a, b) => a.weekStart.localeCompare(b.weekStart) || byCreation(a, b)).at(-1);
+  if (fallback) return { ...state, activeId: fallback.id };
+  const fresh = newBoard(state.week, now, emptyBoard(state.week), state.deleted[weeklyBoardId(state.week)] ? undefined : weeklyBoardId(state.week));
+  return { ...state, boards: [fresh], activeId: fresh.id };
+}
 
-/** Archive the current board if its week is over, and start a fresh board for the week containing `now`. */
+/** Whether the tab was last closed with the Dashboard open (kv key). */
+export const DASHBOARD_OPEN_KEY = 'dashboard-open';
+/** The most recently edited board of the current week (the newest one if none was edited). */
+export function latestEditedBoard(state: WeekState) {
+  return state.boards.filter(b => b.weekStart === state.week).sort((a, b) => a.updatedAt - b.updatedAt || byCreation(a, b)).at(-1);
+}
+/** Add a blank board to the current week and open it. */
+export function addBoard(state: WeekState, now = new Date()): WeekState {
+  const board = newBoard(state.week, now);
+  return { ...state, boards: [...state.boards, board], activeId: board.id };
+}
+export const openBoard = (state: WeekState, id: string): WeekState => state.boards.some(b => b.id === id) ? { ...state, activeId: id } : state;
+export function deleteBoard(state: WeekState, id: string, now = new Date()): WeekState {
+  if (!state.boards.some(b => b.id === id)) return state;
+  return ensureActive({ ...state, boards: state.boards.filter(b => b.id !== id), deleted: { ...state.deleted, [id]: now.getTime() } }, now);
+}
+/** Bring a conflict copy back as a board of its week (it does not replace anything). */
+export function restoreConflict(state: WeekState, id: string, now = new Date()): WeekState {
+  const copy = state.conflicts.find(c => c.id === id); if (!copy) return state;
+  const board = { ...newBoard(copy.weekStart, now, copy.doc), startedOn: copy.startedOn, updatedAt: now.getTime(), baseRev: '' };
+  return { ...state, boards: [...state.boards, board], conflicts: state.conflicts.filter(c => c.id !== id) };
+}
+
+/** Match older conflict copies only when their original board can be identified unambiguously. */
+export function conflictBoard(state: WeekState, copy: ConflictCopy) {
+  if (copy.sourceBoardId) return state.boards.find(board => board.id === copy.sourceBoardId);
+  const candidates = state.boards.filter(board => board.weekStart === copy.weekStart);
+  if (candidates.length === 1) return candidates[0];
+  const ids = new Set(Object.keys(copy.doc.items));
+  const ranked = candidates.map(board => ({ board, shared: Object.keys(board.doc.items).filter(id => ids.has(id)).length })).sort((a, b) => b.shared - a.shared);
+  return ranked[0]?.shared > 0 && ranked[0].shared > (ranked[1]?.shared ?? 0) ? ranked[0].board : undefined;
+}
+
+/** Keep one version of the original board; remember the decision so sync cannot restore its conflict copy. */
+export function resolveBoardConflict(state: WeekState, id: string, choice: 'restore' | 'discard', now = new Date()): WeekState {
+  const copy = state.conflicts.find(c => c.id === id); if (!copy) return state;
+  const original = conflictBoard(state, copy);
+  let next = state;
+  if (choice === 'restore') {
+    if (original) next = { ...state, boards: state.boards.map(board => board.id === original.id
+      ? { ...board, doc: structuredClone(copy.doc), rev: newRev(), updatedAt: now.getTime() } : board) };
+    else next = restoreConflict(state, id, now);
+  }
+  return { ...next, conflicts: next.conflicts.filter(c => c.id !== id), resolvedConflicts: [...new Set([...(state.resolvedConflicts ?? []), id])] };
+}
+
+/** When a new week begins, start its board and open it. Boards from earlier weeks stay as they are. */
 export function rollover(state: WeekState, now = new Date()): WeekState {
   const thisWeek = weekStartISO(now);
   const { effectiveFrom } = getWeekPreference();
   if (effectiveFrom && thisWeek < effectiveFrom) return state;
-  if (state.current.weekStart >= thisWeek) return state;
-  const archived = archiveOf(state.current, now);
-  if (effectiveFrom && state.current.weekStart < effectiveFrom) {
-    const boundary = fromISO(effectiveFrom);
-    archived.weekEnd = toISO(new Date(boundary.getFullYear(), boundary.getMonth(), boundary.getDate() - 1));
-  }
-  const archives = isEmpty(state.current.doc) ? state.archives : [...state.archives.filter(a => a.weekStart !== state.current.weekStart), archived];
-  return { ...state, archives, current: freshCurrent(thisWeek, toISO(now), emptyBoard(thisWeek)) };
+  if (state.week >= thisWeek) return state;
+  let boards = state.boards.filter(b => b.weekStart === thisWeek);
+  if (!boards.length) boards = [newBoard(thisWeek, now, emptyBoard(thisWeek), state.deleted[weeklyBoardId(thisWeek)] ? undefined : weeklyBoardId(thisWeek))];
+  const added = boards.filter(b => !state.boards.includes(b));
+  return { ...state, week: thisWeek, boards: [...state.boards, ...added], activeId: [...boards].sort(byCreation).at(-1)!.id };
 }
 
-export interface Reconciled { state: WeekState; pushCurrent: boolean }
+/** A successful upload advances the base even when editing continued during the request. */
+export function acknowledgeUpload(state: WeekState, uploaded: Board): WeekState {
+  const board = state.boards.find(b => b.id === uploaded.id);
+  if (!board || (board.baseRev !== uploaded.baseRev && board.rev !== uploaded.rev)) return state;
+  return { ...state, boards: state.boards.map(b => b === board ? { ...b, baseRev: uploaded.rev } : b) };
+}
+
+export interface Remote { boards: Board[]; deleted: Tombstone[]; conflicts: ConflictCopy[]; resolvedConflicts?: string[] }
 /**
  * Combine this device's state with what the cloud holds, preserving meaningful divergent edits:
- * - archives are unioned (identical `rev` = same content);
- * - the live week fast-forwards when only one side changed;
- * - if both sides changed, the cloud version stays current and the local edits are kept as a conflict copy.
+ * - a board fast-forwards when only one side changed it;
+ * - if both sides changed it, the cloud version wins and the local edits are kept as a conflict copy;
+ * - a deletion on either side wins, unless this device edited the board after it was deleted elsewhere.
  */
-export function reconcile(local: WeekState, remoteCurrent: CurrentWeek | undefined, remoteArchives: Archive[], remoteConflicts: ConflictCopy[], now = new Date()): Reconciled {
-  const archives = new Map(local.archives.map(a => [a.id, a]));
-  const conflicts = new Map(local.conflicts.map(c => [c.id, c]));
-  remoteConflicts.forEach(c => { if (!conflicts.has(c.id)) conflicts.set(c.id, c); });
-  const addConflict = (copy: Omit<ConflictCopy, 'id' | 'createdAt'> & { rev: string }) => {
-    const id = `conflict-${copy.weekStart}-${copy.rev}`;
-    if ([...conflicts.values()].some(c => c.weekStart === copy.weekStart && c.kind === copy.kind && equivalentBoards(c.doc, copy.doc))) return;
-    if (!conflicts.has(id)) conflicts.set(id, { id, createdAt: now.getTime(), weekStart: copy.weekStart, startedOn: copy.startedOn, kind: copy.kind, doc: copy.doc });
+export function reconcile(local: WeekState, remote: Remote, now = new Date()): WeekState {
+  const resolvedConflicts = [...new Set([...(local.resolvedConflicts ?? []), ...(remote.resolvedConflicts ?? [])])];
+  const resolved = new Set(resolvedConflicts);
+  const conflicts = new Map(local.conflicts.filter(c => !resolved.has(c.id)).map(c => [c.id, c]));
+  remote.conflicts.forEach(c => { if (!resolved.has(c.id) && !conflicts.has(c.id)) conflicts.set(c.id, c); });
+  const keep = (board: Board) => {
+    const id = `conflict-${board.weekStart}-${board.rev}`;
+    if (resolved.has(id) || [...conflicts.values()].some(c => (c.sourceBoardId ? c.sourceBoardId === board.id : c.weekStart === board.weekStart) && equivalentBoards(c.doc, board.doc))) return;
+    if (!conflicts.has(id)) conflicts.set(id, { id, sourceBoardId: board.id, createdAt: now.getTime(), weekStart: board.weekStart, startedOn: board.startedOn, doc: board.doc });
   };
-  const put = (a: Archive) => {
-    const existing = archives.get(a.id);
-    if (!existing) { archives.set(a.id, a); return; }
-    if (existing.rev === a.rev) return;
-    const [winner, loser] = (a.updatedAt ?? 0) > (existing.updatedAt ?? 0) ? [a, existing] : [existing, a];
-    archives.set(a.id, winner);
-    if (!isEmpty(loser.doc) && !equivalentBoards(winner.doc, loser.doc)) addConflict({ weekStart: loser.weekStart, startedOn: loser.startedOn, kind: 'archive', doc: loser.doc, rev: loser.rev });
-  };
-  remoteArchives.forEach(put);
-
-  let current = local.current, pushCurrent = false;
-  const dirty = local.current.rev !== local.current.baseRev;
-  if (!remoteCurrent) pushCurrent = true;
-  else if (remoteCurrent.weekStart > local.current.weekStart) { // another device already moved on to a later week
-    if (!isEmpty(local.current.doc)) put(archiveOf(local.current, now));
-    current = { ...remoteCurrent, baseRev: remoteCurrent.rev };
-  } else if (remoteCurrent.weekStart < local.current.weekStart) { // the other device is behind; it will catch up from our push
-    if (!isEmpty(remoteCurrent.doc)) put(archiveOf(remoteCurrent, now));
-    pushCurrent = true;
-  } else if (remoteCurrent.rev === local.current.rev) {
-    current = { ...local.current, baseRev: remoteCurrent.rev };
-  } else if (remoteCurrent.rev === local.current.baseRev) {
-    pushCurrent = dirty; // cloud unchanged since we last synced
-  } else if (!dirty) {
-    current = { ...remoteCurrent, baseRev: remoteCurrent.rev, startedOn: remoteCurrent.startedOn < local.current.startedOn ? remoteCurrent.startedOn : local.current.startedOn };
-  } else { // both changed since the last sync: keep the cloud version, set our edits aside
-    if (!equivalentBoards(local.current.doc, remoteCurrent.doc)) addConflict({ weekStart: local.current.weekStart, startedOn: local.current.startedOn, kind: 'week', doc: local.current.doc, rev: local.current.rev });
-    current = { ...remoteCurrent, baseRev: remoteCurrent.rev };
+  const deleted = { ...local.deleted };
+  for (const t of remote.deleted) deleted[t.id] = Math.max(deleted[t.id] ?? 0, t.deletedAt);
+  const remoteBoards = new Map(remote.boards.map(b => [b.id, b]));
+  const boards: Board[] = [];
+  for (const l of local.boards) {
+    const r = remoteBoards.get(l.id); remoteBoards.delete(l.id);
+    if (deleted[l.id] !== undefined) { if (l.rev !== l.baseRev && l.updatedAt > deleted[l.id] && !isEmpty(l.doc)) keep(l); continue; }
+    if (!r || r.rev === l.baseRev) boards.push(l); // unknown to the cloud, or the cloud is unchanged since we last synced
+    else if (r.rev === l.rev) boards.push({ ...l, baseRev: r.rev });
+    else if (l.rev === l.baseRev) boards.push({ ...r, baseRev: r.rev, startedOn: r.startedOn < l.startedOn ? r.startedOn : l.startedOn });
+    else { // both changed since the last sync: keep the cloud version, set our edits aside
+      if (!equivalentBoards(l.doc, r.doc)) keep(l);
+      boards.push({ ...r, baseRev: r.rev });
+    }
   }
-  const state = rollover({ v: 1, current, archives: [...archives.values()], conflicts: [...conflicts.values()] }, now);
-  return { state, pushCurrent: pushCurrent && state.current === current };
+  for (const r of remoteBoards.values()) if (deleted[r.id] === undefined) boards.push({ ...r, baseRev: r.rev });
+  return rollover(ensureActive({ ...local, boards, deleted, conflicts: [...conflicts.values()], resolvedConflicts }, now), now);
 }
+
+/** Older boards (and other devices' files) may lack fields added later. */
+export function normalizeBoard(raw: StoredBoard): Board {
+  const rev = raw.rev ?? `legacy-${raw.updatedAt ?? 0}`;
+  return {
+    id: raw.id, weekStart: raw.weekStart, startedOn: raw.startedOn ?? raw.weekStart, ...(raw.weekEnd ? { weekEnd: raw.weekEnd } : {}),
+    createdAt: raw.createdAt ?? (Date.parse(raw.archivedAt ?? '') || fromISO(raw.weekStart).getTime()), updatedAt: raw.updatedAt ?? 0,
+    rev, baseRev: raw.baseRev ?? '', doc: raw.doc,
+  };
+}
+/** The single live board of earlier versions becomes the board its week would have been archived as. */
+export const legacyCurrentId = (weekStart: string) => `archive-${weekStart}`;
 
 export async function loadWeekState(now = new Date()): Promise<WeekState> {
   try {
     await loadWeekPreference();
     const stored = await readStored();
-    if (stored.current) {
-      const c = stored.current as Partial<CurrentWeek> & Pick<CurrentWeek, 'weekStart' | 'startedOn' | 'doc'>;
-      const rev = c.rev ?? newRev(); // data from before cloud sync: unsynced unless it was never edited
-      const current: CurrentWeek = { ...c, updatedAt: c.updatedAt ?? 0, rev, baseRev: c.baseRev ?? ((c.updatedAt ?? 0) === 0 ? rev : '') };
-      return rollover({ v: 1, current, archives: stored.archives.map(a => ({ ...a, rev: a.rev ?? `legacy-${a.updatedAt ?? 0}`, updatedAt: a.updatedAt ?? 0 })), conflicts: stored.conflicts }, now);
+    if (stored.boards.length && (stored.meta || !stored.current)) {
+      const boards = stored.boards.map(normalizeBoard);
+      const meta = stored.meta ?? { week: weekStartISO(now), activeId: '', deleted: {} }; // boards saved before their index was
+      return rollover(ensureActive({ v: 2, ...meta, boards, conflicts: stored.conflicts }, now), now);
     }
-    // One-time migration from the earliest localStorage persistence.
-    const legacy = localStorage.getItem(LEGACY_KEY);
-    if (legacy) {
-      const parsed = JSON.parse(legacy) as { v: 1; current: { weekStart: string; startedOn: string; doc: BoardDocument }; archives: Omit<Archive, 'rev' | 'updatedAt'>[] };
-      if (parsed?.v === 1 && parsed.current?.doc && Array.isArray(parsed.archives)) {
-        const state = rollover({ v: 1, current: { ...parsed.current, updatedAt: Date.now(), rev: newRev(), baseRev: '' }, archives: parsed.archives.map(a => ({ ...a, updatedAt: 0, rev: `legacy-${a.weekStart}` })), conflicts: [] }, now);
-        await saveWeekState(state); localStorage.removeItem(LEGACY_KEY); return state;
-      }
+    let legacy: { current?: LegacyCurrent; archives: StoredBoard[] } = { current: stored.current, archives: stored.boards };
+    // The earliest versions kept everything in localStorage.
+    const early = !stored.current && localStorage.getItem(LEGACY_KEY);
+    if (early) {
+      const parsed = JSON.parse(early) as { v: 1; current: LegacyCurrent; archives: Omit<StoredBoard, 'rev' | 'updatedAt'>[] };
+      if (parsed?.v === 1 && parsed.current?.doc && Array.isArray(parsed.archives)) legacy = { current: { ...parsed.current, updatedAt: Date.now(), rev: newRev(), baseRev: '' }, archives: parsed.archives.map(a => ({ ...a, updatedAt: 0, rev: `legacy-${a.weekStart}` })) };
+    }
+    if (legacy.current) {
+      // One-time migration from a single live board plus read-only archives.
+      const c = legacy.current;
+      const archives = legacy.archives.map(normalizeBoard);
+      const id = archives.some(a => a.id === legacyCurrentId(c.weekStart)) ? weeklyBoardId(c.weekStart) : legacyCurrentId(c.weekStart);
+      const rev = c.rev ?? newRev(); // data from before cloud sync: unsynced unless it was never edited
+      const current = normalizeBoard({ ...c, id, rev, createdAt: fromISO(c.startedOn ?? c.weekStart).getTime(), baseRev: c.baseRev ?? ((c.updatedAt ?? 0) === 0 ? rev : '') });
+      const state = rollover({ v: 2, week: c.weekStart, activeId: id, boards: [...archives, current], deleted: {}, conflicts: stored.conflicts.map(({ kind: _kind, ...copy }) => copy) }, now);
+      if (await saveWeekState(state) && early) localStorage.removeItem(LEGACY_KEY);
+      return state;
     }
   } catch { /* fall through to a fresh start */ }
-  const weekStart = weekStartISO(now);
-  return { v: 1, archives: [], conflicts: [], current: freshCurrent(weekStart, toISO(now), createDemo()) };
+  const week = weekStartISO(now);
+  const first = newBoard(week, now, createDemo(), weeklyBoardId(week));
+  const state: WeekState = { v: 2, week, activeId: first.id, boards: [first], deleted: {}, conflicts: [] };
+  await saveWeekState(state);
+  return state;
 }
 export async function saveWeekState(state: WeekState) {
-  try { await Promise.all([writeCurrent(state.current), writeArchives(state.archives), writeConflicts(state.conflicts)]); return true; } catch { return false; }
+  try { await Promise.all([writeBoards(state.boards), writeMeta({ week: state.week, activeId: state.activeId, deleted: state.deleted, resolvedConflicts: state.resolvedConflicts }), writeConflicts(state.conflicts)]); return true; } catch { return false; }
 }

@@ -46,7 +46,7 @@ export function createDocumentStore(initial: BoardDocument) {
       for (const source of sources) if (items[source.id]) items[source.id] = { ...items[source.id], x: source.x + dx, y: source.y + dy };
       publish({ ...document, items });
     },
-    duplicateItems(sources: BoardItem[], sourcePins: Pin[], sourceConnections: BoardDocument['connections'], offset = { x: 24, y: 24 }) {
+    duplicateItems(sources: BoardItem[], sourcePins: Pin[], sourceConnections: BoardDocument['connections'], offset = { x: 24, y: 24 }, includeLoosePins = false) {
       const items = { ...document.items }, pins = { ...document.pins }, connections = { ...document.connections };
       const pinIds = new Map<string, string>();
       const ids: string[] = [];
@@ -58,6 +58,11 @@ export function createDocumentStore(initial: BoardDocument) {
         });
         items[id] = { ...structuredClone(source), id, x: source.x + offset.x, y: source.y + offset.y,
           zIndex: top + index + 1, pins: attached.map(pin => pin.id) };
+      }
+      if (includeLoosePins) for (const pin of sourcePins) {
+        if (pin.itemId !== null) continue;
+        const id = crypto.randomUUID(); pinIds.set(pin.id, id);
+        pins[id] = { ...pin, id, x: (pin.x ?? 0) + offset.x, y: (pin.y ?? 0) + offset.y };
       }
       for (const connection of Object.values(sourceConnections)) {
         const fromPinId = pinIds.get(connection.fromPinId), toPinId = pinIds.get(connection.toPinId);

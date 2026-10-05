@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.3
+
+- Support multiple boards per week and migrate existing archives without losing their content. Keep one editing tab active at a time.
+- Add Command/Ctrl+A to select all cards, pins and strings; copy and paste complete layouts between boards with independent IDs and one-step undo.
+- Order weeks from oldest to newest within each Dashboard month. Stack boards with overlapping previews, clearer shadows and hover feedback.
+- Add boards from the This week context menu; confirm deletion of a week's last board.
+- Review sync conflicts one pair at a time in a compact dialog with detailed, read-only previews. Keep one version, postpone, or resume from the account menu; show an avatar warning while unresolved.
+- Preserve original board identity when resolving conflicts and sync resolution records so other devices cannot restore discarded copies.
+- Redraw the future-week theatre curtain with flat red colour blocks and fine gold details.
+
+
 ## 0.1.2
 
 - Duplicate board items with Option/Alt-drag or Command/Ctrl+C and V, preserving content and attached pins with independent IDs and single-step undo.

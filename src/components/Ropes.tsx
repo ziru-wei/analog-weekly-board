@@ -5,15 +5,15 @@ export function ropePath(a: Point, b: Point, slack = 1) {
   const sag = clamp(distance * .07, 8, 42);
   return `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${(a.y + b.y) / 2 + sag * 2 * slack} ${b.x} ${b.y}`;
 }
-export function Ropes({ document, selected, temporary, onSelect }: {
-  document: BoardDocument; selected?: string; temporary: { from: string; to: Point } | null; onSelect: (id: string) => void;
+export function Ropes({ document, selected, selectedPins, temporary, onSelect }: {
+  document: BoardDocument; selected?: string; selectedPins?: string[]; temporary: { from: string; to: Point } | null; onSelect: (id: string) => void;
 }) {
   const position = (id: string) => { const pin = document.pins[id]; return pin ? pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined) : null; };
   const start = temporary && position(temporary.from);
   return <svg className="ropes" viewBox="0 0 1600 1000" aria-label="Strings between pins">
     {Object.values(document.connections).map(connection => {
       const a = position(connection.fromPinId), b = position(connection.toPinId); if (!a || !b) return null;
-      return <Rope key={connection.id} a={a} b={b} selected={selected === connection.id} onSelect={() => onSelect(connection.id)} />;
+      return <Rope key={connection.id} a={a} b={b} selected={selected === connection.id || !!(selectedPins?.includes(connection.fromPinId) && selectedPins.includes(connection.toPinId))} onSelect={() => onSelect(connection.id)} />;
     })}
     {temporary && start && <path d={ropePath(start, temporary.to)} className="rope-thread temporary" />}
   </svg>;

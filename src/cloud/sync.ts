@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { type Archive, type ConflictCopy, type CurrentWeek, type WeekState, reconcile } from '../weeks';
+import { type Board, type ConflictCopy, type Tombstone, type WeekState, legacyCurrentId, normalizeBoard, reconcile } from '../weeks';
+import type { LegacyCurrent, StoredBoard } from '../storage';
 import type { BoardDocument } from '../model';
 import { readKv, writeKv } from '../storage';
 import { fetchUser, hasRefreshFlow, hasValidToken, invalidateToken, requestToken, revoke, type GoogleUser } from './auth';
@@ -21,10 +22,12 @@ const driveBackend: Backend = { list: drive.listFiles, read: drive.readJson, wri
 export type CloudStatus = 'unconfigured' | 'signed-out' | 'connecting' | 'idle' | 'syncing' | 'needs-reconnect' | 'error';
 export interface CloudState { status: CloudStatus; user?: GoogleUser; lastSyncedAt?: number; error?: string }
 /** What the sync engine needs from the app: the live state, a way to apply a merged result, and to mark a pushed version. */
-export interface Host { getState(): WeekState; apply(next: WeekState): void; markSynced(uploaded: CurrentWeek): void }
+export interface Host { getState(): WeekState; apply(next: WeekState): void; markSynced(uploaded: Board): void }
 
 const SESSION_KEY = 'cloud-session', PENDING_DELETES = 'cloud-pending-deletes', PENDING_UPLOAD = 'cloud-pending-upload';
-const CURRENT_FILE = 'current.json', archiveFile = (a: { weekStart: string }) => `archive-${a.weekStart}.json`, conflictFile = (c: { id: string }) => `${c.id}.json`, assetFile = (hash: string) => `asset-${hash}`;
+// Each board (or its tombstone) is `<board id>.json`. `current.json` held the single live board of earlier versions.
+const LEGACY_CURRENT_FILE = 'current.json', boardFile = (b: { id: string }) => `${b.id}.json`, isBoardFile = (name: string) => /^(archive|week|board)-.+\.json$/.test(name), conflictFile = (c: { id: string }) => `${c.id}.json`, assetFile = (hash: string) => `asset-${hash}`;
+const RESOLVED_CONFLICTS_FILE = 'resolved-conflicts.json';
 const GC_GRACE_MS = 24 * 3600_000, GC_INTERVAL_MS = 3600_000;
 const AUTH_ERROR = /interaction_required|login_required|consent_required|popup|access_denied|did not approve|user interaction|cancel/i;
 
@@ -43,7 +46,7 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
     if (Date.now() - lastGc < GC_INTERVAL_MS) return;
     lastGc = Date.now();
     const referenced = new Map<string, string>();
-    for (const doc of [merged.current.doc, ...merged.archives.map(a => a.doc), ...merged.conflicts.map(c => c.doc)]) await externalize(doc, referenced);
+    for (const doc of [...merged.boards.map(b => b.doc), ...merged.conflicts.map(c => c.doc)]) await externalize(doc, referenced);
     for (const f of files) {
       if (!f.name.startsWith('asset-') || referenced.has(f.name.slice('asset-'.length))) continue;
       if (Date.now() - Date.parse(f.modifiedTime) > GC_GRACE_MS) await backend.remove(f.id);
@@ -70,11 +73,13 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
       const settings = await mergeWeekPreference(remoteSettings);
       if (!remoteSettings || settings.rev !== remoteSettings.rev) await backend.write('settings.json', settings, settingsFile?.id);
 
+      const resolutionsFile = byName.get(RESOLVED_CONFLICTS_FILE);
+      const remoteResolved = resolutionsFile ? await backend.read<string[]>(resolutionsFile.id) : [];
       const local = host.getState();
       // Photos we already hold locally never need downloading.
       const assets = new Map<string, string>();
       const scan = async (doc: BoardDocument) => { await externalize(doc, assets); };
-      for (const doc of [local.current.doc, ...local.archives.map(a => a.doc), ...local.conflicts.map(c => c.doc)]) await scan(doc);
+      for (const doc of [...local.boards.map(b => b.doc), ...local.conflicts.map(c => c.doc)]) await scan(doc);
       const loadAsset = async (hash: string) => {
         if (assets.has(hash)) return assets.get(hash);
         const file = byName.get(assetFile(hash)); if (!file) return undefined;
@@ -82,47 +87,58 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
       };
       const pull = async <T extends { doc: BoardDocument }>(id: string): Promise<T> => { const value = await backend.read<T>(id); return { ...value, doc: await internalize(value.doc, loadAsset) }; };
 
-      // Pull: the live week, plus archives/conflicts we don't have yet or that changed since the last sync.
-      const currentFile = byName.get(CURRENT_FILE);
-      const remoteCurrent = currentFile ? await pull<CurrentWeek>(currentFile.id) : undefined;
+      // Pull every board file (device clocks are not a reliable cursor for Drive changes), plus conflicts we don't have yet.
       const conflictIds = new Set(local.conflicts.map(c => c.id));
-      const remoteArchives: Archive[] = [], remoteConflicts: ConflictCopy[] = [];
+      const remoteBoards = new Map<string, Board>(), tombstones = new Map<string, Tombstone>(), remoteConflicts: ConflictCopy[] = [];
       for (const f of files) {
-        // Device clocks are not a reliable cursor for Drive changes.
-        if (f.name.startsWith('archive-')) remoteArchives.push(await pull<Archive>(f.id));
-        else if (f.name.startsWith('conflict-') && !conflictIds.has(f.name.replace('.json', ''))) remoteConflicts.push(await pull<ConflictCopy>(f.id));
+        if (isBoardFile(f.name)) {
+          const value = await backend.read<StoredBoard | Tombstone>(f.id);
+          if ('deleted' in value && value.deleted) tombstones.set(value.id, value);
+          else remoteBoards.set((value as StoredBoard).id, normalizeBoard({ ...(value as StoredBoard), doc: await internalize((value as StoredBoard).doc, loadAsset) }));
+        } else if (f.name.startsWith('conflict-') && !conflictIds.has(f.name.replace('.json', ''))) remoteConflicts.push(await pull<ConflictCopy>(f.id));
+      }
+      // Earlier versions kept the live board in current.json; it becomes the board its week would have been archived as.
+      const legacyFile = byName.get(LEGACY_CURRENT_FILE);
+      let legacyBoard: Board | undefined;
+      if (legacyFile) {
+        const legacy = await pull<LegacyCurrent>(legacyFile.id), id = legacyCurrentId(legacy.weekStart);
+        if (!remoteBoards.has(id) && !tombstones.has(id)) legacyBoard = normalizeBoard({ ...legacy, id });
       }
 
       // Recover a successful write whose response was lost (including a tab closed mid-upload).
-      const pendingUpload = await readKv<CurrentWeek>(PENDING_UPLOAD);
-      if (pendingUpload && remoteCurrent?.rev === pendingUpload.rev && remoteCurrent.weekStart === pendingUpload.weekStart) host.markSynced(pendingUpload);
+      const pendingUpload = await readKv<Board>(PENDING_UPLOAD);
+      if (pendingUpload && remoteBoards.get(pendingUpload.id)?.rev === pendingUpload.rev) host.markSynced(pendingUpload);
       // No await between taking this snapshot and applying its merge: edits made during pulls survive.
       const latest = host.getState();
-      const { state: merged, pushCurrent } = reconcile(latest, remoteCurrent, remoteArchives, remoteConflicts.filter(c => !pending.includes(c.id)));
-      const sig = (s: WeekState) => JSON.stringify([s.current.rev, s.current.baseRev, s.current.weekStart, s.archives.map(a => [a.id, a.rev]), s.conflicts.map(c => c.id)]);
+      const merged = reconcile(latest, { boards: [...remoteBoards.values(), ...(legacyBoard ? [legacyBoard] : [])], deleted: [...tombstones.values()], conflicts: remoteConflicts.filter(c => !pending.includes(c.id)), resolvedConflicts: remoteResolved });
+      const sig = (s: WeekState) => JSON.stringify([s.week, s.activeId, s.boards.map(b => [b.id, b.rev, b.baseRev]), Object.keys(s.deleted), s.conflicts.map(c => c.id), s.resolvedConflicts ?? []]);
       if (sig(merged) !== sig(latest)) host.apply(merged);
 
-      // Push: upload any photos the cloud lacks, then board files.
+      // Push: upload any photos the cloud lacks, then boards the cloud lacks or that changed here, then deletions.
       const upload = async (doc: BoardDocument) => {
         const out = new Map<string, string>(), ext = await externalize(doc, out);
         for (const [hash, data] of out) if (!byName.has(assetFile(hash))) { await backend.writeAsset(assetFile(hash), data); byName.set(assetFile(hash), { id: '', name: assetFile(hash), modifiedTime: '' }); }
         return ext;
       };
-      if (pushCurrent) {
-        const c = merged.current;
-        const doc = await upload(c.doc);
-        await writeKv(PENDING_UPLOAD, c);
-        await backend.write(CURRENT_FILE, { ...c, baseRev: c.rev, doc }, currentFile?.id);
-        host.markSynced(c);
+      for (const b of merged.boards) {
+        if (remoteBoards.get(b.id)?.rev === b.rev) continue;
+        const doc = await upload(b.doc);
+        await writeKv(PENDING_UPLOAD, b);
+        await backend.write(boardFile(b), { ...b, baseRev: b.rev, doc }, byName.get(boardFile(b))?.id);
+        host.markSynced(b);
         await writeKv(PENDING_UPLOAD, null);
-        if (host.getState().current.rev !== c.rev) queued = true;
+        const now = host.getState().boards.find(x => x.id === b.id);
+        if (now && now.rev !== b.rev) queued = true;
       }
-      const remoteArchiveById = new Map(remoteArchives.map(a => [a.id, a]));
-      for (const a of merged.archives) {
-        const file = byName.get(archiveFile(a)), remote = remoteArchiveById.get(a.id);
-        if (!file || (remote && remote.rev !== a.rev)) await backend.write(archiveFile(a), { ...a, doc: await upload(a.doc) }, file?.id);
+      for (const [id, deletedAt] of Object.entries(merged.deleted)) {
+        if (tombstones.get(id)?.deletedAt === deletedAt) continue;
+        await backend.write(boardFile({ id }), { id, deleted: true, deletedAt } satisfies Tombstone, byName.get(boardFile({ id }))?.id);
       }
-      for (const c of merged.conflicts) if (!byName.has(conflictFile(c))) await backend.write(conflictFile(c), { ...c, doc: await upload(c.doc) });
+      const resolvedIds = [...new Set([...(merged.resolvedConflicts ?? []), ...(host.getState().resolvedConflicts ?? [])])];
+      for (const c of merged.conflicts) if (!resolvedIds.includes(c.id) && !byName.has(conflictFile(c))) await backend.write(conflictFile(c), { ...c, doc: await upload(c.doc) });
+      if (resolvedIds.some(id => !remoteResolved.includes(id))) await backend.write(RESOLVED_CONFLICTS_FILE, resolvedIds, resolutionsFile?.id);
+      for (const id of resolvedIds) { const file = byName.get(`${id}.json`); if (file) await backend.remove(file.id); }
+      if (legacyFile) await backend.remove(legacyFile.id);
       await collectGarbage(files, merged);
       set({ status: 'idle', lastSyncedAt: Date.now() });
     } catch (error) {
@@ -145,6 +161,8 @@ export function createCloud(backend: Backend = driveBackend, configured = isClou
     getState: () => state,
     subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
     attach(h: Host) { host = h; },
+    /** Stop syncing for good (another tab took over the board). */
+    detach() { host = null; clearTimeout(timer); },
     /** Call when local data changed. */
     changed() { if (active()) schedule(); },
     syncNow: sync,

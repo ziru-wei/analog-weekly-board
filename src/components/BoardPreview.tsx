@@ -35,12 +35,19 @@ function PreviewItem({ item }: { item: BoardItem }) {
       <image href={data.src} x={x + pad.l} y={y + pad.t} width={w - pad.l - pad.r} height={h - pad.t - pad.b} preserveAspectRatio="xMidYMid slice" />
     </g>;
   }
-  if (youtubeVideo(data.url) || bilibiliVideo(data.url) || socialPost(data.url)) return <SimpleItem item={item} />;
+  const video = youtubeVideo(data.url);
+  const image = data.image || data.media?.images[0] || (video ? `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg` : undefined);
+  const horizontal = w > h * 1.5;
   return <g transform={transform} style={{ filter: shadow }}>
     <rect x={x} y={y} width={w} height={h} fill="#f7f6f1" />
     <foreignObject x={x} y={y} width={w} height={h}>
-      <div style={{ boxSizing: 'border-box', padding: '14px 16px', font: "620 20px/1.16 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", color: '#2b2a27', overflowWrap: 'anywhere', overflow: 'hidden', height: '100%' }}>
-        <div style={{ font: "550 12px/1.2 'IBM Plex Mono', 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace", color: '#8a867b', marginBottom: 6 }}>{data.domain}</div>{data.title}
+      <div style={{ display: 'flex', flexDirection: horizontal ? 'row' : 'column', boxSizing: 'border-box', padding: 10, gap: 8, height: '100%', overflow: 'hidden', color: '#2b2a27' }}>
+        {image && <img src={image} alt="" draggable={false} referrerPolicy="no-referrer" style={{ display: 'block', objectFit: 'contain', background: '#ece9e1', minHeight: 0, minWidth: 0, width: horizontal ? '52%' : '100%', flex: horizontal ? '0 0 52%' : '1 1 0' }} />}
+        <div style={{ flex: horizontal ? '1 1 0' : '0 0 auto', minWidth: 0, overflow: 'hidden', overflowWrap: 'anywhere', font: "550 17px/1.25 Inter, ui-sans-serif, system-ui, sans-serif" }}>
+          <div style={{ font: "11px/1.2 monospace", color: '#8a867b', marginBottom: 5 }}>{data.domain}</div>
+          <div>{data.title}</div>
+          {data.description && <div style={{ font: '12px/1.4 system-ui, sans-serif', color: '#777369', marginTop: 6 }}>{data.description}</div>}
+        </div>
       </div>
     </foreignObject>
   </g>;
@@ -66,7 +73,8 @@ function SimpleItem({ item }: { item: BoardItem }) {
 }
 
 export const BoardPreview = memo(function BoardPreview({ doc, className, simplified = false }: { doc: BoardDocument; className?: string; simplified?: boolean }) {
-  const items = Object.values(doc.items).sort((a, b) => a.zIndex - b.zIndex);
+  const vellum = (item: BoardItem) => !simplified && item.data.type === 'sticky' && item.data.variant === 'vellum' ? 1 : 0;
+  const items = Object.values(doc.items).sort((a, b) => vellum(a) - vellum(b) || a.zIndex - b.zIndex);
   const position = (pinId: string) => { const pin = doc.pins[pinId]; return pin ? pinPosition(pin, pin.itemId ? doc.items[pin.itemId] : undefined) : null; };
   return <svg className={className} viewBox={`0 0 ${doc.board.width} ${doc.board.height}`} preserveAspectRatio="xMidYMid slice" role="img" aria-label={`Board: ${doc.board.title}`}>
     {Object.values(doc.connections).map(c => {

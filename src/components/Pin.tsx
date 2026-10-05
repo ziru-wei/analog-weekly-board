@@ -1,7 +1,7 @@
 import { useId, type PointerEvent } from 'react';
 import type { Pin as PinModel, Point } from '../model';
-export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connecting, decorative = false, metallic = false, label, onPointerDown, onPalette }: {
-  pin: PinModel; position: Point; center?: Point; moving: boolean; connecting: boolean; decorative?: boolean; metallic?: boolean; label?: string;
+export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connecting, selected = false, decorative = false, metallic = false, label, onPointerDown, onPalette }: {
+  pin: PinModel; position: Point; center?: Point; moving: boolean; connecting: boolean; selected?: boolean; decorative?: boolean; metallic?: boolean; label?: string;
   onPointerDown: (event: PointerEvent, pin: PinModel) => void; onPalette: (pin: PinModel) => void;
 }) {
   const id = useId().replace(/:/g, '');
@@ -16,7 +16,7 @@ export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connec
   const shadowLength = Math.min(5.5, distance / 130);
   const shadowAngle = Math.atan2(lightY, lightX) * 180 / Math.PI;
 
-  return <button className={`pin ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
+  return <button className={`pin ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''} ${selected ? 'group-selected' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
     aria-label={label ?? "Pushpin: drag to connect; hold to move; right-click to recolor"}
     style={{ left: position.x, top: position.y }}
     onPointerDown={event => onPointerDown(event, pin)} onDoubleClick={event => event.stopPropagation()}

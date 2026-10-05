@@ -42,7 +42,7 @@ export function readBoardGroup(text: string) {
   if (!text.startsWith('AnalogWeeklyBoard/2\n')) return null;
   try {
     const payload = JSON.parse(text.slice('AnalogWeeklyBoard/2\n'.length));
-    if (!Array.isArray(payload.items) || !payload.items.length || !Array.isArray(payload.pins) || !payload.connections || typeof payload.connections !== 'object') return null;
+    if (!Array.isArray(payload.items) || !Array.isArray(payload.pins) || !payload.connections || typeof payload.connections !== 'object') return null;
     const items: BoardItem[] = [];
     for (const item of payload.items) {
       if (!item || !Array.isArray(item.pins)) return null;
@@ -52,7 +52,16 @@ export function readBoardGroup(text: string) {
     }
     if (new Set(items.map(item => item.id)).size !== items.length) return null;
     const pinIds = new Set(items.flatMap(item => item.pins));
-    const pins: Pin[] = payload.pins.filter((pin: Pin) => pin && pinIds.has(pin.id));
+    const itemIds = new Set(items.map(item => item.id));
+    const pins: Pin[] = [];
+    for (const pin of payload.pins as Pin[]) {
+      if (!pin || typeof pin.id !== 'string' || typeof pin.color !== 'string') return null;
+      if (pin.itemId === null) {
+        if (!Number.isFinite(pin.x) || !Number.isFinite(pin.y) || !Number.isFinite(pin.xRatio) || !Number.isFinite(pin.yRatio)) return null;
+      } else if (!itemIds.has(pin.itemId) || !items.find(item => item.id === pin.itemId)?.pins.includes(pin.id)) return null;
+      pins.push(pin); pinIds.add(pin.id);
+    }
+    if ((!items.length && !pins.length) || new Set(pins.map(pin => pin.id)).size !== pins.length || items.some(item => item.pins.some(id => !pins.some(pin => pin.id === id && pin.itemId === item.id)))) return null;
     const connections: Record<string, Connection> = {};
     for (const connection of Object.values(payload.connections) as Connection[]) {
       if (connection && typeof connection.id === 'string' && pinIds.has(connection.fromPinId) && pinIds.has(connection.toPinId)) connections[connection.id] = connection;
