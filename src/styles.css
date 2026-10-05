@@ -44,6 +44,7 @@ textarea.note-text { cursor: text; user-select: text; overflow: auto; }
 .photo { display: block; width: 100%; height: 100%; object-fit: contain; filter: saturate(.77) contrast(.94) sepia(.08); pointer-events: none; }
 .pin { position: absolute; width: 40px; height: 40px; padding: 0; transform: translate(-50%, -50%); border-radius: 50%; z-index: 3; cursor: crosshair; touch-action: none; }
 .pin svg { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.silver-pins-canvas { position: absolute; inset: 0; width: 1600px; height: 1000px; z-index: 9; pointer-events: none; }
 .pin:hover { outline: 1px solid #fff6da60; }
 .pin.repositioning { outline: 1px dashed #fff2cb; cursor: move; }
 .pin.connect-target { outline: 2px solid #efe3ba; outline-offset: 2px; background: #efe3ba26; box-shadow: 0 0 0 5px #efe3ba24; }

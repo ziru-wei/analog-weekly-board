@@ -6,8 +6,11 @@ export type ItemData =
 export interface BoardItem {
   id: string; type: ItemData['type']; x: number; y: number; width: number; height: number;
   rotation: number; zIndex: number; data: ItemData; pins: string[];
+  /** Stable origin used only by automatically carried weekly copies. */
+  carryOrigin?: string;
 }
-export interface Pin { id: string; itemId: string | null; x?: number; y?: number; xRatio: number; yRatio: number; color: string }
+export interface Pin { id: string; itemId: string | null; x?: number; y?: number; xRatio: number; yRatio: number; color: string; kind?: 'silver'; carryId?: string }
+export const SILVER_PIN_COLOR = '#b9c2cc';
 export interface Connection { id: string; fromPinId: string; toPinId: string }
 export interface BoardDocument {
   board: { id: string; title: string; width: number; height: number };

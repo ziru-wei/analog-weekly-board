@@ -54,15 +54,17 @@ export function createDocumentStore(initial: BoardDocument) {
       for (const [index, source] of [...sources].sort((a, b) => a.zIndex - b.zIndex).entries()) {
         const id = crypto.randomUUID(); ids.push(id);
         const attached = sourcePins.filter(pin => source.pins.includes(pin.id)).map(pin => {
-          const copy = { ...pin, id: crypto.randomUUID(), itemId: id }; pinIds.set(pin.id, copy.id); pins[copy.id] = copy; return copy;
+          const copy = { ...pin, id: crypto.randomUUID(), itemId: id };
+          if (copy.kind === 'silver') copy.carryId = copy.id;
+          pinIds.set(pin.id, copy.id); pins[copy.id] = copy; return copy;
         });
         items[id] = { ...structuredClone(source), id, x: source.x + offset.x, y: source.y + offset.y,
-          zIndex: top + index + 1, pins: attached.map(pin => pin.id) };
+          zIndex: top + index + 1, pins: attached.map(pin => pin.id), carryOrigin: undefined };
       }
       if (includeLoosePins) for (const pin of sourcePins) {
         if (pin.itemId !== null) continue;
         const id = crypto.randomUUID(); pinIds.set(pin.id, id);
-        pins[id] = { ...pin, id, x: (pin.x ?? 0) + offset.x, y: (pin.y ?? 0) + offset.y };
+        pins[id] = { ...pin, id, x: (pin.x ?? 0) + offset.x, y: (pin.y ?? 0) + offset.y, ...(pin.kind === 'silver' ? { carryId: id } : {}) };
       }
       for (const connection of Object.values(sourceConnections)) {
         const fromPinId = pinIds.get(connection.fromPinId), toPinId = pinIds.get(connection.toPinId);
@@ -73,10 +75,14 @@ export function createDocumentStore(initial: BoardDocument) {
     },
     duplicateItem(source: BoardItem, sourcePins: Pin[], position = { x: source.x + 24, y: source.y + 24 }) {
       const id = crypto.randomUUID();
-      const copiedPins = sourcePins.filter(pin => source.pins.includes(pin.id)).map(pin => ({ ...pin, id: crypto.randomUUID(), itemId: id }));
+      const copiedPins = sourcePins.filter(pin => source.pins.includes(pin.id)).map(pin => {
+        const copy = { ...pin, id: crypto.randomUUID(), itemId: id };
+        if (copy.kind === 'silver') copy.carryId = copy.id;
+        return copy;
+      });
       const item = constrainItem({ ...structuredClone(source), id, ...position,
         zIndex: Math.max(0, ...Object.values(document.items).map(item => item.zIndex)) + 1,
-        pins: copiedPins.map(pin => pin.id) }, document.board, copiedPins, clipBounds);
+        pins: copiedPins.map(pin => pin.id), carryOrigin: undefined }, document.board, copiedPins, clipBounds);
       publish({ ...document, items: { ...document.items, [id]: item },
         pins: { ...document.pins, ...Object.fromEntries(copiedPins.map(pin => [pin.id, pin])) } });
       return id;
@@ -109,12 +115,12 @@ export function createDocumentStore(initial: BoardDocument) {
       publish({ ...document, pins: { ...document.pins, [id]: pin }, items: { ...document.items, [itemId]: { ...item, pins: [...item.pins, id] } } });
       return id;
     },
-    placePin(point: Point, color: string, itemId?: string) {
+    placePin(point: Point, color: string, itemId?: string, kind?: Pin['kind']) {
       const id = crypto.randomUUID();
       const item = itemId ? document.items[itemId] : undefined;
       const p = { x: clamp(point.x, PIN_BOARD_INSET, document.board.width - PIN_BOARD_INSET), y: clamp(point.y, PIN_BOARD_INSET, document.board.height - PIN_BOARD_INSET) };
       const local = item ? localPoint(p, item) : null;
-      const pin: Pin = { id, itemId: item?.id ?? null, x: p.x, y: p.y, xRatio: local && item ? local.x / item.width : 0, yRatio: local && item ? local.y / item.height : 0, color };
+      const pin: Pin = { id, itemId: item?.id ?? null, x: p.x, y: p.y, xRatio: local && item ? local.x / item.width : 0, yRatio: local && item ? local.y / item.height : 0, color, ...(kind ? { kind, carryId: id } : {}) };
       publish({ ...document, pins: { ...document.pins, [id]: pin }, items: item ? { ...document.items, [item.id]: { ...item, pins: [...item.pins, id] } } : document.items });
       return id;
     },
@@ -130,7 +136,7 @@ export function createDocumentStore(initial: BoardDocument) {
       if (item) items[item.id] = { ...items[item.id], pins: [...items[item.id].pins, id] };
       publish({ ...document, items, pins: { ...document.pins, [id]: next } });
     },
-    updatePin(id: string, patch: Partial<Pick<Pin, 'xRatio' | 'yRatio' | 'color'>>) {
+    updatePin(id: string, patch: Partial<Pick<Pin, 'xRatio' | 'yRatio' | 'color' | 'carryId'>>) {
       const pin = document.pins[id]; if (!pin) return;
       const next = { ...pin, ...patch };
       next.xRatio = clamp(next.xRatio, .03, .97); next.yRatio = clamp(next.yRatio, .03, .97);

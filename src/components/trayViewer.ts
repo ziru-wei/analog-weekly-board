@@ -1,18 +1,16 @@
 import {
   BufferGeometry,
   CanvasTexture,
-  CircleGeometry,
   EquirectangularReflectionMapping,
   Float32BufferAttribute,
-  LatheGeometry,
   Mesh,
   MeshBasicMaterial,
   PhysicalMaterial,
   PointLight,
+  PlaneGeometry,
   RepeatWrapping,
   SRGBColorSpace,
   ThreeViewer,
-  Vector2,
   type IObject3D,
 } from 'threepipe';
 import { AnisotropyPlugin } from '@threepipe/webgi-plugins';
@@ -22,80 +20,102 @@ export const TRAY_H = 18;
 /** Transparent margin around the sheet so nothing is clipped by the canvas. */
 export const TRAY_PAD = 6;
 
-const THICKNESS = 1.5;
-const EDGE_RADIUS = 0.5;
-const CURL_RADIUS = 6;
-const CURL_ANGLE = (52 * Math.PI) / 180;
+const THICKNESS = .28;
 const PAINT_R = 4.1;
 const PAINT_H = 2.3;
 const PAINT_GAP = 13.5;
 
-type Station = { x: number; z: number; nx: number; nz: number };
+type ProfileRing = { inset: number; z: number; radius: number };
+const CORNER_STEPS = 12;
+const EDGE_STEPS = 24;
+const RING_VERTICES = 4 * (CORNER_STEPS + EDGE_STEPS);
 
-// Cross-section of the sheet along x: flat in the middle, both ends curling up.
-function sheetProfile(): Station[] {
-  const flatHalf = TRAY_W / 2 - CURL_RADIUS * Math.sin(CURL_ANGLE);
-  const arc = 24;
-  const left: Station[] = [];
-  for (let i = 0; i < arc; i++) {
-    const a = CURL_ANGLE * (1 - i / arc);
-    left.push({ x: -flatHalf - CURL_RADIUS * Math.sin(a), z: CURL_RADIUS * (1 - Math.cos(a)), nx: Math.sin(a), nz: Math.cos(a) });
-  }
-  const mid: Station[] = [-flatHalf, -flatHalf / 2, 0, flatHalf / 2, flatHalf].map((x) => ({ x, z: 0, nx: 0, nz: 1 }));
-  const right = left.map((p) => ({ x: -p.x, z: p.z, nx: -p.nx, nz: p.nz })).reverse();
-  return [...left, ...mid, ...right];
-}
-
-// Rounded-rectangle loop (y, offset along the surface normal): the sheet's cross-section across its width.
-function sectionLoop() {
-  const hy = TRAY_H / 2, ht = THICKNESS / 2, r = EDGE_RADIUS, seg = 5;
-  const pts: [number, number][] = [];
-  const corner = (cy: number, cd: number, a0: number) => {
-    for (let i = 0; i <= seg; i++) {
-      const a = a0 + (i / seg) * (Math.PI / 2);
-      pts.push([cy + r * Math.cos(a), cd + r * Math.sin(a)]);
-    }
+// Rounded rectangular sections form the rolled lip, stamped ribs and square paint pads.
+function makeRoundedProfileGeometry(width: number, height: number, rings: ProfileRing[], seed?: number) {
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const cornerSteps = CORNER_STEPS, count = RING_VERTICES;
+  const vertex = (x: number, y: number, z: number) => {
+    pos.push(x, y, z);
+    uv.push((x + TRAY_W / 2) / TRAY_W, (y + TRAY_H / 2) / TRAY_H);
   };
-  corner(hy - r, ht - r, 0); // top, back edge
-  corner(-hy + r, ht - r, Math.PI / 2); // top, front edge
-  corner(-hy + r, -ht + r, Math.PI); // bottom, front edge
-  corner(hy - r, -ht + r, Math.PI * 1.5); // bottom, back edge
-  return pts;
-}
-
-// A thin stainless sheet with real thickness and softly rounded edges, swept along the curled profile.
-function makeSheetGeometry() {
-  const prof = sheetProfile();
-  const loop = sectionLoop();
-  const n = loop.length;
-  const pos: number[] = [];
-  const uv: number[] = [];
-  const idx: number[] = [];
-  prof.forEach((p) => {
-    loop.forEach(([y, d]) => {
-      pos.push(p.x + p.nx * d, y, p.z + p.nz * d);
-      uv.push((p.x + TRAY_W / 2) / TRAY_W, (y + TRAY_H / 2) / TRAY_H);
-    });
-  });
-  for (let i = 0; i < prof.length - 1; i++) {
-    for (let k = 0; k < n; k++) {
-      const a = i * n + k, b = i * n + ((k + 1) % n), c = (i + 1) * n + k, d = (i + 1) * n + ((k + 1) % n);
-      idx.push(a, b, c, b, d, c);
+  for (const { inset, z, radius } of rings) {
+    const halfX = width / 2 - inset, halfY = height / 2 - inset;
+    const r = Math.min(radius, halfX, halfY);
+    const contourVertex = (x: number, y: number) => {
+      const theta = Math.atan2(y, x);
+      const wobble = seed === undefined ? 1 : 1 + .012 * Math.sin(7 * theta + seed) + .008 * Math.sin(11 * theta + seed * 2);
+      vertex(x * wobble, y * wobble, z);
+    };
+    for (let corner = 0; corner < 4; corner++) {
+      const cx = (corner === 0 || corner === 3 ? 1 : -1) * (halfX - r);
+      const cy = (corner < 2 ? 1 : -1) * (halfY - r);
+      for (let step = 0; step <= cornerSteps; step++) {
+        const angle = (corner + step / cornerSteps) * Math.PI / 2;
+        const x = cx + r * Math.cos(angle), y = cy + r * Math.sin(angle);
+        contourVertex(x, y);
+      }
+      const endAngle = (corner + 1) * Math.PI / 2;
+      const next = (corner + 1) % 4;
+      const nextCx = (next === 0 || next === 3 ? 1 : -1) * (halfX - r);
+      const nextCy = (next < 2 ? 1 : -1) * (halfY - r);
+      for (let step = 1; step < EDGE_STEPS; step++) {
+        const t = step / EDGE_STEPS;
+        contourVertex(cx + (nextCx - cx) * t + r * Math.cos(endAngle), cy + (nextCy - cy) * t + r * Math.sin(endAngle));
+      }
     }
   }
-  // end caps
-  for (const [i, flip] of [[0, false], [prof.length - 1, true]] as const) {
-    const p = prof[i];
-    const base = pos.length / 3;
-    loop.forEach(([y, d]) => { pos.push(p.x + p.nx * d, y, p.z + p.nz * d); uv.push(0, 0); });
-    for (let k = 1; k < n - 1; k++) idx.push(...(flip ? [base, base + k + 1, base + k] : [base, base + k, base + k + 1]));
+  for (let ring = 0; ring < rings.length - 1; ring++) for (let i = 0; i < count; i++) {
+    const a = ring * count + i, b = ring * count + (i + 1) % count;
+    idx.push(a, b, a + count, b, b + count, a + count);
   }
-  const geo = new BufferGeometry();
-  geo.setAttribute('position', new Float32BufferAttribute(pos, 3));
-  geo.setAttribute('uv', new Float32BufferAttribute(uv, 2));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
+  const center = pos.length / 3;
+  vertex(0, 0, rings[rings.length - 1].z);
+  const last = (rings.length - 1) * count;
+  for (let i = 0; i < count; i++) idx.push(center, last + i, last + (i + 1) % count);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+  geometry.setIndex(idx);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeTrayGeometry() {
+  const smoothGeometry = makeRoundedProfileGeometry(TRAY_W, TRAY_H, [
+    { inset: 0, z: -THICKNESS / 2, radius: 1.25 },
+    { inset: 0, z: .72, radius: 1.25 },
+    { inset: .12, z: .88, radius: 1.13 },
+    { inset: .3, z: .71, radius: .95 },
+    { inset: .31, z: .22, radius: .94 },
+    { inset: .58, z: THICKNESS / 2, radius: .67 },
+  ]);
+  const position = smoothGeometry.attributes.position;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+    if (z > .3) {
+      // Subpixel forming irregularity changes reflection along the lip without a painted highlight.
+      position.setZ(i, z + .035 * Math.sin(x * .34 + y * .8) + .014 * Math.sin(x * .77 - y * 1.3));
+    }
+  }
+  // Independent face normals preserve the folded sheet's hard creases instead of rounding them off.
+  const geometry = smoothGeometry.toNonIndexed();
+  smoothGeometry.dispose();
+  geometry.computeVertexNormals();
+  const floorIndices = RING_VERTICES * 3;
+  const rimIndices = geometry.attributes.position.count - floorIndices;
+  geometry.addGroup(0, rimIndices, 0);
+  geometry.addGroup(rimIndices, floorIndices, 1);
+  return geometry;
+}
+
+function makeStampedRibGeometry(width: number, height: number) {
+  return makeRoundedProfileGeometry(width, height, [
+    { inset: 0, z: THICKNESS / 2, radius: .8 },
+    { inset: .09, z: .22, radius: .71 },
+    { inset: .23, z: .6, radius: .57 },
+    { inset: .38, z: .73, radius: .42 },
+    { inset: .62, z: .76, radius: .18 },
+  ]);
 }
 
 // Horizontal brushed-steel grain, shared by roughness and bump so highlights break up along x.
@@ -128,23 +148,67 @@ function makeBrushedTexture() {
   return tex;
 }
 
+// Fine directional wear and mottled steel, kept local to the palette's recessed pan.
+function makePanTextures() {
+  const w = 1536, h = 320;
+  const canvases = Array.from({ length: 3 }, () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    return canvas;
+  });
+  const contexts = canvases.map(canvas => canvas.getContext('2d')!);
+  const data = contexts.map(context => context.createImageData(w, h));
+  let state = 74123;
+  const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+  for (let y = 0; y < h; y++) {
+    const streak = (random() - .5) * 18;
+    for (let x = 0; x < w; x++) {
+      const grain = (random() - .5) * 24;
+      const patina = 9 * Math.sin(x * .009 + Math.sin(y * .026)) + 6 * Math.sin(x * .023 - y * .013);
+      const values = [174 + streak + grain + patina, 125 + grain * .6 + patina, 128 + streak * .25 + grain * .45];
+      for (let i = 0; i < data.length; i++) {
+        const offset = (y * w + x) * 4;
+        data[i].data[offset] = data[i].data[offset + 1] = data[i].data[offset + 2] = values[i];
+        data[i].data[offset + 3] = 255;
+      }
+    }
+  }
+  contexts.forEach((context, i) => context.putImageData(data[i], 0, 0));
+  for (let i = 0; i < 650; i++) {
+    const x = random() * w, y = random() * h, length = 12 + random() * 510;
+    const tilt = (random() - .5) * 2.5;
+    contexts.forEach((context, channel) => {
+      context.lineWidth = .45 + random() * .55;
+      context.strokeStyle = channel === 0 ? `rgba(240,239,231,${.06 + random() * .2})` : 'rgba(210,210,210,.16)';
+      context.beginPath(); context.moveTo(x, y); context.lineTo(x + length, y + tilt); context.stroke();
+    });
+  }
+  const textures = canvases.map(canvas => {
+    const texture = new CanvasTexture(canvas);
+    texture.anisotropy = 8;
+    return texture;
+  });
+  textures[0].colorSpace = SRGBColorSpace;
+  return { color: textures[0], roughness: textures[1], bump: textures[2] };
+}
+
 // Procedural studio environment: dark room with soft boxes, so the metal has something crisp to reflect.
-export function makeStudioEnv() {
+export function makeStudioEnv(sharpReflections = false) {
   const c = document.createElement('canvas');
   c.width = 1024;
   c.height = 512;
   const g = c.getContext('2d')!;
   const bg = g.createLinearGradient(0, 0, 0, 512);
-  bg.addColorStop(0, '#c4c7cd');
-  bg.addColorStop(0.5, '#80838a');
-  bg.addColorStop(1, '#26272a');
+  bg.addColorStop(0, sharpReflections ? '#92979f' : '#c4c7cd');
+  bg.addColorStop(0.5, sharpReflections ? '#555b64' : '#80838a');
+  bg.addColorStop(1, sharpReflections ? '#16191e' : '#26272a');
   g.fillStyle = bg;
   g.fillRect(0, 0, 1024, 512);
   const box = (x: number, y: number, w: number, h: number, a: number) => {
     const grad = g.createLinearGradient(x, y, x, y + h);
     grad.addColorStop(0, `rgba(255,255,255,${a})`);
     grad.addColorStop(1, `rgba(255,255,255,${a * 0.55})`);
-    g.filter = 'blur(4px)';
+    g.filter = sharpReflections ? 'blur(3px)' : 'blur(4px)';
     g.fillStyle = grad;
     g.fillRect(x, y, w, h);
   };
@@ -153,39 +217,53 @@ export function makeStudioEnv() {
   box(820, 190, 70, 190, 0.6);
   box(30, 230, 90, 170, 0.8);
   box(430, 270, 160, 60, 0.7);
+  if (sharpReflections) {
+    // Narrow strip lights give adjacent folded faces distinct bright and dark reflections.
+    box(180, 170, 50, 260, 1);
+    box(620, 200, 22, 220, .95);
+    box(670, 180, 160, 180, .3);
+  }
   const tex = new CanvasTexture(c);
   tex.mapping = EquirectangularReflectionMapping;
   tex.colorSpace = SRGBColorSpace;
   return tex;
 }
 
-// A dollop of wet paint: domed with a rolled meniscus and a slightly irregular outline.
+// Broad square paint pads with softened, slightly uneven edges and a shallow crown.
 function makePaintGeometry(seed: number) {
-  const prof = [[0, 1], [0.38, 0.985], [0.62, 0.93], [0.82, 0.78], [0.93, 0.55], [0.985, 0.28], [1, 0.08], [1.01, 0]]
-    .map(([r, z]) => new Vector2(r * PAINT_R, z * PAINT_H));
-  const geo = new LatheGeometry(prof.reverse(), 64);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), z = p.getY(i), y = p.getZ(i); // lathe axis is y
-    const th = Math.atan2(y, x);
-    const k = 1 + 0.035 * Math.sin(3 * th + seed) + 0.025 * Math.sin(5 * th + seed * 2.3) + 0.012 * Math.sin(9 * th + seed * 4.1);
-    p.setXYZ(i, x * k, z * (1 + 0.06 * Math.sin(2 * th + seed * 1.7)), y * k);
+  return makeRoundedProfileGeometry(PAINT_R * 2, PAINT_R * 2, [
+    { inset: 0, z: 0, radius: .55 },
+    { inset: .03, z: PAINT_H * .24, radius: .58 },
+    { inset: .15, z: PAINT_H * .66, radius: .65 },
+    { inset: .45, z: PAINT_H * .9, radius: .7 },
+    { inset: .85, z: PAINT_H, radius: .65 },
+  ], seed);
+}
+
+function makePigmentTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext('2d')!;
+  const pixels = context.createImageData(128, 128);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    const grain = 170 + Math.random() * 85;
+    pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = grain;
+    pixels.data[i + 3] = 255;
   }
-  geo.rotateX(Math.PI / 2); // lathe y axis -> world z (up toward the camera)
-  geo.computeVertexNormals();
-  return geo;
+  context.putImageData(pixels, 0, 0);
+  return new CanvasTexture(canvas);
 }
 
 function makeShadowTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(64, 64, 14, 64, 64, 62);
-  grad.addColorStop(0, 'rgba(0,0,0,.75)');
-  grad.addColorStop(0.5, 'rgba(0,0,0,.38)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
+  const pixels = g.createImageData(128, 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+    const distance = Math.pow(Math.pow(Math.abs(x - 63.5), 6) + Math.pow(Math.abs(y - 63.5), 6), 1 / 6) / 64;
+    pixels.data[(y * 128 + x) * 4 + 3] = Math.round(150 * Math.pow(Math.max(0, 1 - distance), 1.8));
+  }
+  g.putImageData(pixels, 0, 0);
   return new CanvasTexture(c);
 }
 
@@ -205,7 +283,8 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
   const viewer = new ThreeViewer({
     canvas,
     msaa: true,
-    renderScale: Math.min(window.devicePixelRatio || 1, 2),
+    // Supersample the small WebGL canvas so the thin metal lip stays crisp at normal DPR.
+    renderScale: 2,
     rgbm: false,
     tonemap: true,
     plugins: [AnisotropyPlugin],
@@ -213,8 +292,8 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
   const scene = viewer.scene;
   scene.backgroundColor = null;
   scene.background = null;
-  scene.environment = makeStudioEnv();
-  scene.environmentIntensity = 1.35;
+  scene.environment = makeStudioEnv(true);
+  scene.environmentIntensity = 1.4;
 
   // 1 world unit = 1 css px; near-orthographic camera, tilted just enough to show the sheet's edge.
   const cam = scene.mainCamera;
@@ -232,26 +311,61 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
   const add = (o: unknown) => scene.addObject(o as IObject3D, { autoCenter: false, autoScale: false, addToRoot: true });
 
   const sheetMat = createTrayMetalMaterial();
-  const sheet = new Mesh(makeSheetGeometry(), sheetMat);
+  sheetMat.color.set(0xd0d3d8);
+  sheetMat.roughness = .17;
+  sheetMat.bumpScale = .012;
+  const pan = makePanTextures();
+  const panMat = new PhysicalMaterial({
+    color: 0xd4d6d9, metalness: 1, roughness: .36,
+    map: pan.color, roughnessMap: pan.roughness, bumpMap: pan.bump, bumpScale: .09,
+  });
+  const sheet = new Mesh(makeTrayGeometry(), [sheetMat, panMat]);
   const aniso = viewer.getPlugin(AnisotropyPlugin);
-  aniso?.enableAnisotropy(sheetMat, undefined, 0.9, 0.2, 'ROTATION');
-  aniso?.tryComputeTangents(sheet as unknown as IObject3D, [sheetMat]);
+  aniso?.enableAnisotropy(sheetMat, undefined, .15, .2, 'ROTATION');
+  aniso?.enableAnisotropy(panMat, undefined, .78, .2, 'ROTATION');
+  aniso?.tryComputeTangents(sheet as unknown as IObject3D, [sheetMat, panMat]);
   add(sheet);
 
-  // Paint dollops resting on the sheet, each with a soft contact shadow.
+  // Stampings share the well's material and continuous UVs; only the rolled rim is polished.
+  const addStamping = (width: number, height: number, x: number, y: number) => {
+    const geometry = makeStampedRibGeometry(width, height);
+    const uv = geometry.attributes.uv;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) + x / TRAY_W, uv.getY(i) + y / TRAY_H);
+    }
+    const rib = new Mesh(geometry, panMat);
+    rib.position.set(x, y, 0);
+    aniso?.tryComputeTangents(rib as unknown as IObject3D, [panMat]);
+    add(rib);
+  };
+  for (const y of [-6, 6]) addStamping(78, 1.65, 0, y);
+  for (const x of [-43, 43]) addStamping(1.65, 9, x, 0);
+
+  // Square paint pads resting in the well, each with a matching soft contact shadow.
   const shadowTex = makeShadowTexture();
+  const pigment = makePigmentTexture();
   const paints: PhysicalMaterial[] = [];
   for (let i = 0; i < 6; i++) {
     const x = (i - 2.5) * PAINT_GAP;
-    const mat = new PhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: 0.4, clearcoat: 0.7, clearcoatRoughness: 0.15 });
+    const mat = new PhysicalMaterial({
+      color: 0xffffff, metalness: 0, roughness: .68, clearcoat: .12, clearcoatRoughness: .4,
+      bumpMap: pigment, bumpScale: .14,
+    });
+    // Each pad maps the pigment grain across its own surface, independent of the tray UVs.
+    const paintGeometry = makePaintGeometry(i * 1.9 + .7);
+    const paintPosition = paintGeometry.attributes.position;
+    const paintUv = paintGeometry.attributes.uv;
+    for (let v = 0; v < paintUv.count; v++) {
+      paintUv.setXY(v, paintPosition.getX(v) / (PAINT_R * 2) + .5, paintPosition.getY(v) / (PAINT_R * 2) + .5);
+    }
     paints.push(mat);
     const shadow = new Mesh(
-      new CircleGeometry(PAINT_R * 1.6, 32),
+      new PlaneGeometry(PAINT_R * 3.2, PAINT_R * 3.2),
       new MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, toneMapped: false }),
     );
     shadow.position.set(x + 0.5, -0.9, THICKNESS / 2 + 0.05);
     add(shadow);
-    const paint = new Mesh(makePaintGeometry(i * 1.9 + 0.7), mat);
+    const paint = new Mesh(paintGeometry, mat);
     paint.position.set(x, 0, THICKNESS / 2 - 0.1);
     add(paint);
   }
@@ -261,7 +375,7 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
   add(light);
 
   const setColors = (colors: string[]) => {
-    paints.forEach((m, i) => { if (colors[i]) { m.color.set(colors[i]); m.emissive.set(colors[i]); m.emissiveIntensity = 0.55; } m.setDirty?.(); });
+    paints.forEach((m, i) => { if (colors[i]) { m.color.set(colors[i]); m.emissive.set(colors[i]); m.emissiveIntensity = .3; } m.setDirty?.(); });
     scene.setDirty();
   };
   return { viewer, light, setColors };

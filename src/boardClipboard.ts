@@ -27,7 +27,7 @@ export function readBoardClipboard(text: string): { item: BoardItem; pins: Pin[]
       if (!strings('src', 'alt') || !Number.isFinite(data.aspectRatio) || data.aspectRatio <= 0 || !['white', 'black', 'worn'].includes(data.frame) || (data.caption !== undefined && typeof data.caption !== 'string')) return null;
       if (data.crop && !['x', 'y', 'w', 'h'].every(key => Number.isFinite(data.crop[key]))) return null;
     } else if (data.type !== 'tape') return null;
-    if (!pins.every(pin => pin && typeof pin.id === 'string' && item.pins.includes(pin.id) && typeof pin.color === 'string' && Number.isFinite(pin.xRatio) && Number.isFinite(pin.yRatio) && pin.xRatio >= 0 && pin.xRatio <= 1 && pin.yRatio >= 0 && pin.yRatio <= 1)) return null;
+    if (!pins.every(pin => pin && typeof pin.id === 'string' && item.pins.includes(pin.id) && typeof pin.color === 'string' && (pin.kind === undefined || pin.kind === 'silver') && (pin.carryId === undefined || typeof pin.carryId === 'string') && Number.isFinite(pin.xRatio) && Number.isFinite(pin.yRatio) && pin.xRatio >= 0 && pin.xRatio <= 1 && pin.yRatio >= 0 && pin.yRatio <= 1)) return null;
     return { item, pins };
   } catch { return null; }
 }
@@ -55,7 +55,7 @@ export function readBoardGroup(text: string) {
     const itemIds = new Set(items.map(item => item.id));
     const pins: Pin[] = [];
     for (const pin of payload.pins as Pin[]) {
-      if (!pin || typeof pin.id !== 'string' || typeof pin.color !== 'string') return null;
+      if (!pin || typeof pin.id !== 'string' || typeof pin.color !== 'string' || (pin.kind !== undefined && pin.kind !== 'silver') || (pin.carryId !== undefined && typeof pin.carryId !== 'string')) return null;
       if (pin.itemId === null) {
         if (!Number.isFinite(pin.x) || !Number.isFinite(pin.y) || !Number.isFinite(pin.xRatio) || !Number.isFinite(pin.yRatio)) return null;
       } else if (!itemIds.has(pin.itemId) || !items.find(item => item.id === pin.itemId)?.pins.includes(pin.id)) return null;

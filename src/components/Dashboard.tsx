@@ -115,32 +115,27 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
   const [reviewed, setReviewed] = useState(0);
   const reviewing = review && state.conflicts.length > 0;
   const postpone = () => setReview(false);
-  const [weekMenu, setWeekMenu] = useState<{ x: number; y: number } | null>(null);
-  const menu = useRef<HTMLDivElement>(null), weekTrigger = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
+  const weekTrigger = useRef<HTMLButtonElement>(null);
+  const extraBoardClicks = useRef({ count: 0, time: 0 });
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || reviewing) return;
-      if (weekMenu) { setWeekMenu(null); weekTrigger.current?.focus({ preventScroll: true }); }
-      else onClose();
+      if (event.key === 'Escape' && !reviewing) onClose();
+    };
+    const resetClicks = (event: PointerEvent) => {
+      if (!weekTrigger.current?.contains(event.target as Node)) extraBoardClicks.current = { count: 0, time: 0 };
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, weekMenu, reviewing]);
-  useEffect(() => {
-    if (!weekMenu) return;
-    menu.current?.querySelector('button')?.focus({ preventScroll: true });
-    const outside = (event: PointerEvent) => { if (!menu.current?.contains(event.target as Node)) setWeekMenu(null); };
-    const dismiss = () => setWeekMenu(null);
-    window.addEventListener('pointerdown', outside);
-    window.addEventListener('scroll', dismiss, true);
-    window.addEventListener('resize', dismiss);
-    return () => { window.removeEventListener('pointerdown', outside); window.removeEventListener('scroll', dismiss, true); window.removeEventListener('resize', dismiss); };
-  }, [weekMenu]);
-  const showWeekMenu = (x: number, y: number) => setWeekMenu({
-    x: Math.max(8, Math.min(x, window.innerWidth - 188)),
-    y: Math.max(8, Math.min(y, window.innerHeight - 54)),
-  });
+    window.addEventListener('pointerdown', resetClicks);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', resetClicks); };
+  }, [onClose, reviewing]);
+  const requestExtraBoard = () => {
+    const now = performance.now(), previous = extraBoardClicks.current;
+    const count = now - previous.time <= 1200 ? previous.count + 1 : 1;
+    extraBoardClicks.current = { count, time: now };
+    if (count < 5) return;
+    extraBoardClicks.current = { count: 0, time: 0 };
+    if (window.confirm('Do you really need another board for this week?')) onAdd();
+  };
   const weeks = new Map<string, Board[]>([[state.week, []]]);
   for (const board of state.boards) weeks.set(board.weekStart, [...(weeks.get(board.weekStart) ?? []), board]);
   const weekStarts = [...weeks.keys()];
@@ -169,7 +164,7 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
     <div inert={reviewing}>
     <header className="dash-head">
       <div className="dash-greeting"><Stash count={state.boards.length} /><p>{greeting(state.boards.length)}</p></div>
-      <CloudPanel unresolvedCount={state.conflicts.length} onSolve={() => { setWeekMenu(null); setReviewed(0); setReview(true); }} />
+      <CloudPanel unresolvedCount={state.conflicts.length} onSolve={() => { extraBoardClicks.current = { count: 0, time: 0 }; setReviewed(0); setReview(true); }} />
     </header>
 
     <div className="dash-timeline">
@@ -183,11 +178,12 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
                 ? <button key={shake} className={`dash-curtain ${shake ? 'shaking' : ''}`} aria-label={`Next week's board opens on ${label.split(' – ')[0]}`} title={`Opens on ${label.split(' – ')[0]}`} onClick={() => setShake(n => n + 1)}><Curtain /></button>
                 : <div className="dash-future-slot" />}
             </div>;
-            return <div key={week} className={`dash-week ${week === state.week ? 'this-week' : ''}`} role="group" aria-label={`Week of ${label}`}
-              onContextMenu={event => { if (week === state.week) { event.preventDefault(); event.stopPropagation(); showWeekMenu(event.clientX, event.clientY); } }}>
-              <h3 className="dash-week-label"><b>{label}</b>{week === state.week ? <button ref={weekTrigger} className="dash-current-week" aria-haspopup="menu" aria-expanded={!!weekMenu} aria-controls={weekMenu ? menuId : undefined}
-                onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); showWeekMenu(rect.left, rect.bottom + 6); }}
-                onKeyDown={event => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { event.preventDefault(); const rect = event.currentTarget.getBoundingClientRect(); showWeekMenu(rect.left, rect.bottom + 6); } }}>This week</button> : isPartial(week, startedOn) && <em>Partial week</em>}</h3>
+            return <div key={week} className={`dash-week ${week === state.week ? 'this-week' : ''}`} role="group" aria-label={`Week of ${label}`}>
+              <h3 className="dash-week-label"><b>{label}</b>{week === state.week ? <button ref={weekTrigger} className="dash-current-week"
+                onClick={event => {
+                  if (!boards.length) { onAdd(); return; }
+                  if (event.button === 0 && event.detail > 0) requestExtraBoard();
+                }}>This week</button> : isPartial(week, startedOn) && <em>Partial week</em>}</h3>
               <div className="dash-board-stack">{boards.map((board, index) => {
                 const open = board.id === state.activeId;
                 return <div key={board.id} style={{ '--stack-order': boards.length - index } as CSSProperties} className={`dash-card ${open ? 'current' : ''}`}>
@@ -205,10 +201,6 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
         </div>
       </section>)}
     </div>
-
-    {weekMenu && <div ref={menu} id={menuId} className="dash-week-menu" role="menu" aria-label="This week" style={{ left: weekMenu.x, top: weekMenu.y }}>
-      <button role="menuitem" onClick={() => { setWeekMenu(null); onAdd(); }}>Add a board</button>
-    </div>}
 
     </div>
     {reviewing && <ConflictReview key={state.conflicts[0].id} state={state} copy={state.conflicts[0]} reviewed={reviewed}

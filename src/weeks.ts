@@ -3,6 +3,7 @@ import type { BoardDocument } from './model';
 import { type LegacyCurrent, type StoredBoard, readStored, writeBoards, writeConflicts, writeMeta } from './storage';
 import { equivalentBoards } from './cloud/equivalence';
 import { getWeekPreference, loadWeekPreference } from './weekPreferences';
+import { carryPinnedItems } from './carryForward';
 
 // Weeks use the selected starting weekday in local time (Monday by default).
 /**
@@ -139,8 +140,12 @@ export function rollover(state: WeekState, now = new Date()): WeekState {
   if (state.week >= thisWeek) return state;
   let boards = state.boards.filter(b => b.weekStart === thisWeek);
   if (!boards.length) boards = [newBoard(thisWeek, now, emptyBoard(thisWeek), state.deleted[weeklyBoardId(thisWeek)] ? undefined : weeklyBoardId(thisWeek))];
-  const added = boards.filter(b => !state.boards.includes(b));
-  return { ...state, week: thisWeek, boards: [...state.boards, ...added], activeId: [...boards].sort(byCreation).at(-1)!.id };
+  const first = [...boards].sort(byCreation)[0];
+  const doc = carryPinnedItems(state.boards.filter(b => b.weekStart === state.week).sort(byCreation), first.doc, thisWeek);
+  if (doc !== first.doc) boards = boards.map(b => b === first ? { ...b, doc, rev: newRev(), updatedAt: now.getTime() } : b);
+  const byId = new Map(state.boards.map(b => [b.id, b]));
+  boards.forEach(b => byId.set(b.id, b));
+  return { ...state, week: thisWeek, boards: [...byId.values()], activeId: [...boards].sort(byCreation).at(-1)!.id };
 }
 
 /** A successful upload advances the base even when editing continued during the request. */

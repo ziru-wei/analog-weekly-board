@@ -1,6 +1,6 @@
 import { useId, type PointerEvent } from 'react';
 import type { Pin as PinModel, Point } from '../model';
-export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connecting, selected = false, decorative = false, metallic = false, label, onPointerDown, onPalette }: {
+export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connecting, selected = false, decorative = false, metallic = pin.kind === 'silver', label, onPointerDown, onPalette }: {
   pin: PinModel; position: Point; center?: Point; moving: boolean; connecting: boolean; selected?: boolean; decorative?: boolean; metallic?: boolean; label?: string;
   onPointerDown: (event: PointerEvent, pin: PinModel) => void; onPalette: (pin: PinModel) => void;
 }) {
@@ -17,11 +17,11 @@ export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connec
   const shadowAngle = Math.atan2(lightY, lightX) * 180 / Math.PI;
 
   return <button className={`pin ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''} ${selected ? 'group-selected' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
-    aria-label={label ?? "Pushpin: drag to connect; hold to move; right-click to recolor"}
+    aria-label={label ?? (pin.kind === 'silver' ? 'Silver pushpin: keeps this item on future weeks; hold to move; double-click to remove' : 'Pushpin: drag to connect; hold to move; double-click to remove; right-click to recolor')}
     style={{ left: position.x, top: position.y }}
     onPointerDown={event => onPointerDown(event, pin)} onDoubleClick={event => event.stopPropagation()}
-    onContextMenu={event => { event.preventDefault(); event.stopPropagation(); onPalette(pin); }} onClick={event => { event.stopPropagation(); if (event.detail === 0) onPalette(pin); }}>
-    <svg viewBox="0 0 40 40" aria-hidden="true">
+    onContextMenu={event => { event.preventDefault(); event.stopPropagation(); if (pin.kind !== 'silver') onPalette(pin); }} onClick={event => { event.stopPropagation(); if (event.detail === 0 && pin.kind !== 'silver') onPalette(pin); }}>
+    {pin.kind !== 'silver' && <svg viewBox="0 0 40 40" aria-hidden="true">
       <defs>
         <radialGradient id={`${id}-dome`} cx="32%" cy="22%" r="80%">
           <stop stopColor="white" stopOpacity={metallic ? .88 : .36}/><stop offset=".3" stopColor="white" stopOpacity=".16"/>
@@ -55,6 +55,6 @@ export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connec
         <ellipse cx="20" cy={capY} rx="7.7" ry="4.5" fill={`url(#${id}-cap)`}/>
         <path d={`M14 ${capY - 1.1} Q17 ${capY - 3.5} 23.5 ${capY - 2} L24 ${capY - .8} Q18 ${capY - 1.6} 14.5 ${capY + .4}Z`} fill="white" opacity={metallic ? .6 : .37} filter={`url(#${id}-gloss)`}/>
       </g>
-    </svg>
+    </svg>}
   </button>;
 }

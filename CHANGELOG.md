@@ -5,10 +5,14 @@
 - Support multiple boards per week and migrate existing archives without losing their content. Keep one editing tab active at a time.
 - Add Command/Ctrl+A to select all cards, pins and strings; copy and paste complete layouts between boards with independent IDs and one-step undo.
 - Order weeks from oldest to newest within each Dashboard month. Stack boards with overlapping previews, clearer shadows and hover feedback.
-- Add boards from the This week context menu; confirm deletion of a week's last board.
+- Hide additional-board creation behind five consecutive left clicks on This week and a confirmation; confirm deletion of a week's last board.
 - Review sync conflicts one pair at a time in a compact dialog with detailed, read-only previews. Keep one version, postpone, or resume from the account menu; show an avatar warning while unresolved.
 - Preserve original board identity when resolving conflicts and sync resolution records so other devices cannot restore discarded copies.
 - Redraw the future-week theatre curtain with flat red colour blocks and fine gold details.
+- Render the colour palette as a thin pressed-metal tray with square pigment pads and subtle pointer-driven WebGL reflections. Match next week's curtain backing to the current board colour.
+- Add a distinct WebGL silver ball pin to the lower-left supply. Carry silver-pinned items into the next week's first board while preserving earlier weeks, layout, other attached pins and internal strings.
+- Stop carrying an item when its silver pin is removed. When removing an older pin, ask whether to remove matching later pins if the latest week still has one; retain all existing items.
+- Double-click placed pins to remove them without opening the Dashboard.
 
 
 ## 0.1.2

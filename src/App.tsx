@@ -1,3 +1,4 @@
+import { removeLaterSilverPins } from './carryForward';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { BOARD_CLIPBOARD_TYPE, encodeBoardGroup, readBoardGroup } from './boardClipboard';
 import { measureLabel, toggleLabel } from './labelLayout';
@@ -24,6 +25,7 @@ import { Item } from './components/Item';
 import { Pin } from './components/Pin';
 import { ColorPalette, PAPER_COLORS } from './components/ColorPalette';
 import { PinSupply } from './components/PinSupply';
+import { SilverPins } from './components/SilverPins';
 import { NoteStack, NOTE_STACK_POSITION } from './components/NoteStack';
 import { Tape } from './components/Tape';
 import { TapeRoll, TAPE_WIDTH } from './components/TapeRoll';
@@ -48,7 +50,7 @@ type Gesture =
   | { kind: 'drag' | 'resize'; start: Point; item: BoardItem; moved: boolean; side?: 'left' | 'right'; duplicate?: boolean; items?: BoardItem[] }
   | { kind: 'pin'; start: Point; pin: PinModel; mode: 'pending' | 'connect' | 'move'; moved: boolean; target?: string }
   | { kind: 'tape'; start: Point; end: Point; moved: boolean; sounded?: boolean }
-  | { kind: 'pin-supply'; start: Point; color: string; moved: boolean }
+  | { kind: 'pin-supply'; start: Point; color: string; pinKind?: PinModel['kind']; moved: boolean }
   | { kind: 'supply'; start: Point; color: string; item?: BoardItem; moved: boolean }
   | { kind: 'pan'; start: Point; pan: Point; moved: boolean };
 type Palette = { type: 'pin' | 'paper'; id: string } | null;
@@ -146,6 +148,8 @@ export default function App() {
     return () => { clearInterval(timer); window.document.removeEventListener('visibilitychange', check); };
   }, []);
   const pointer = useRef({ x: 0, y: 0 });
+  const doubleClickStartedOnPin = useRef(false);
+  const doubleClickPinId = useRef<string | null>(null);
   useEffect(() => {
     const track = (event: MouseEvent) => { pointer.current = { x: event.clientX, y: event.clientY }; };
     for (const type of ['pointermove', 'pointerdown', 'contextmenu']) window.addEventListener(type, track as EventListener, true);
@@ -153,7 +157,7 @@ export default function App() {
   }, []);
   // The palette opens next to the cursor that summoned it.
   const palettePos = useMemo(() => (palette ? { ...pointer.current } : null), [palette]);
-  const [pinPreview, setPinPreview] = useState<{ position: Point; color: string } | null>(null);
+  const [pinPreview, setPinPreview] = useState<{ position: Point; color: string; kind?: PinModel['kind'] } | null>(null);
   const [pinDropTarget, setPinDropTarget] = useState<string | null>(null);
   const [movingPin, setMovingPin] = useState<string | null>(null);
   const [temporary, setTemporary] = useState<{ from: string; to: Point; target?: string } | null>(null);
@@ -195,12 +199,24 @@ export default function App() {
   };
   const finishEdit = () => { if (editing) commands.finishTransaction(); setEditing(null); };
   const cancelGesture = () => { const g = gesture.current; if (g?.kind === 'pan') setPan(g.pan); commands.cancelTransaction(); clearGesture(); setPalette(null); };
-  const travelHistory = (redo: boolean) => { finishEdit(); cancelGesture(); if (redo) commands.redo(); else commands.undo(); setSelection(null); };
+  const maybeStopLaterCarry = (removed: PinModel[]) => {
+    const live = liveState(), next = removeLaterSilverPins(live, live.activeId, removed);
+    if (next !== live && window.confirm('Later weeks still have silver pins on this item. Also remove those pins to stop it carrying forward? Existing items will be kept.')) changeBoards(next);
+  };
+  const removedSilverPins = (before: typeof document, after: typeof document) => Object.values(before.pins).filter(pin =>
+    pin.kind === 'silver' && pin.itemId && after.pins[pin.id]?.itemId !== pin.itemId);
+  const travelHistory = (redo: boolean) => {
+    finishEdit(); cancelGesture(); const before = store.getSnapshot();
+    if (redo) commands.redo(); else commands.undo();
+    maybeStopLaterCarry(removedSilverPins(before, store.getSnapshot())); setSelection(null);
+  };
   const removeSelection = () => {
     if (!selection) return;
+    const before = store.getSnapshot();
     if (selection.type === 'item') { commands.beginTransaction(); for (const id of selection.ids ?? [selection.id]) commands.deleteItem(id); for (const id of selection.pinIds ?? []) if (store.getSnapshot().pins[id]) commands.deletePin(id); commands.finishTransaction(); }
     else if (selection.type === 'pin') commands.deletePin(selection.id);
     else commands.deleteConnection(selection.id);
+    maybeStopLaterCarry(removedSilverPins(before, store.getSnapshot()));
     setSelection(null); setPalette(null);
   };
   const point = (event: { clientX: number; clientY: number }): Point => {
@@ -256,7 +272,7 @@ export default function App() {
     if (g.kind === 'pin-supply') {
       const p = point(event);
       if (Math.hypot(p.x - g.start.x, p.y - g.start.y) * scale > 5) g.moved = true;
-      if (g.moved) { setPinPreview({ position: p, color: g.color }); setPinDropTarget(itemAt(event) ?? null); }
+      if (g.moved) { setPinPreview({ position: p, color: g.color, kind: g.pinKind }); setPinDropTarget(itemAt(event) ?? null); }
       return;
     }
     if (g.kind === 'tape') {
@@ -335,7 +351,7 @@ export default function App() {
     if (g.kind === 'pin-supply') {
       const p = point(event);
       if (g.moved && p.x >= 0 && p.y >= 0 && p.x <= 1600 && p.y <= 1000) {
-        const id = commands.placePin(p, g.color, itemAt(event)); setSelection({ type: 'pin', id }); commands.finishTransaction();
+        const id = commands.placePin(p, g.color, itemAt(event), g.pinKind); setSelection({ type: 'pin', id }); commands.finishTransaction();
         sound.play('pin');
       } else commands.cancelTransaction();
       clearGesture(); return;
@@ -365,7 +381,10 @@ export default function App() {
       if (target) window.open(g.item.data.url, '_blank', 'noopener,noreferrer');
     }
     if (g.moved && (g.kind === 'drag' || g.kind === 'supply')) sound.play('place');
+    const detachedSilver = g.kind === 'pin' && g.mode === 'move' && g.moved && g.pin.kind === 'silver' && g.pin.itemId && store.getSnapshot().pins[g.pin.id]?.itemId !== g.pin.itemId ? g.pin : null;
+    if (detachedSilver) commands.updatePin(detachedSilver.id, { carryId: crypto.randomUUID() });
     commands.finishTransaction(g.moved); clearGesture();
+    if (detachedSilver) maybeStopLaterCarry([detachedSilver]);
   };
   const addNote = (p: Point) => {
     finishEdit(); const id = commands.createItem({ type: 'sticky', text: '', color: '#202120', variant: 'label' }, { x: p.x - 90, y: p.y - 14 }, { width: 180, height: 28 }); startEdit(id); sound.play('label');
@@ -563,6 +582,9 @@ export default function App() {
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
     <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
       onPointerDownCapture={event => {
+        const pinTarget = (event.target as Element).closest<HTMLElement>('.pin');
+        doubleClickStartedOnPin.current = !!pinTarget;
+        doubleClickPinId.current = pinTarget?.dataset.pinId ?? null;
         stopZoom();
         if (!tapeHeld || event.button !== 0 || (event.target as Element).closest('.accessory-tray')) return;
         const p = point(event); if (p.x < 0 || p.x > 1600 || p.y < 0 || p.y > 1000) return;
@@ -575,7 +597,13 @@ export default function App() {
         finishEdit(); setSelection(null); setPalette(null);
         if (view.zoom > 1 && !tapeHeld) { gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan, moved: false }; capture(event); }
       }}
-      onDoubleClickCapture={event => { if (tapeHeld) { event.preventDefault(); event.stopPropagation(); } }}
+      onDoubleClickCapture={event => {
+        if (tapeHeld || doubleClickStartedOnPin.current || (event.target as Element).closest('.pin')) {
+          event.preventDefault(); event.stopPropagation();
+          const id = doubleClickPinId.current, pin = id ? store.getSnapshot().pins[id] : undefined;
+          if (!tapeHeld && pin) { commands.deletePin(pin.id); maybeStopLaterCarry([pin]); setSelection(null); setPalette(null); }
+        }
+      }}
       onDragOver={event => event.preventDefault()} onDrop={event => event.preventDefault()}
       onPointerMove={event => { if (tapeHeld) setTapeCursor({ x: event.clientX, y: event.clientY }); pointerMove(event); }} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event => { const captured = captureTarget.current; if (gesture.current && captured?.element === event.target && captured.pointerId === event.pointerId) cancelGesture(); }}>
       <div className="board-size" style={{ top: center.y, transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})` }}>
@@ -594,10 +622,10 @@ export default function App() {
             event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null); commands.beginTransaction();
             gesture.current = { kind: 'supply', start: point(event), color: stackColor, moved: false }; capture(event);
           }} />
-          <PinSupply center={lightingCenter} onDrag={(event, color) => {
+          <PinSupply center={lightingCenter} onDrag={(event, color, pinKind) => {
             if (event.button !== 0 || gesture.current) return;
             event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null); commands.beginTransaction();
-            gesture.current = { kind: 'pin-supply', start: point(event), color, moved: false }; capture(event, true);
+            gesture.current = { kind: 'pin-supply', start: point(event), color, pinKind, moved: false }; capture(event, true);
           }} />
           <div className="items-layer">{Object.values(document.items).filter(item => !(item.data.type === 'sticky' && item.data.variant === 'vellum')).map(renderItem)}</div>
           <div className="vellum-layer">{Object.values(document.items).filter(item => item.data.type === 'sticky' && item.data.variant === 'vellum').map(renderItem)}</div>
@@ -612,8 +640,13 @@ export default function App() {
           }} />
           {tapeGeometry && <div className="tape-preview" style={tapeGeometry}><Tape /></div>}
           <Ropes document={document} selected={selection?.type === 'rope' ? selection.id : undefined} selectedPins={selection?.type === 'item' ? selection.pinIds : undefined} temporary={temporary} onSelect={id => { finishEdit(); setPalette(null); setSelection({ type: 'rope', id }); sound.play('pluck'); }} />
-          {pinPreview && <div className="pin-preview"><Pin decorative center={lightingCenter} pin={{ id: 'preview', itemId: null, xRatio: 0, yRatio: 0, color: pinPreview.color }} position={pinPreview.position} moving connecting={false} onPointerDown={() => {}} onPalette={() => {}} /></div>}
+          {pinPreview && <div className="pin-preview"><Pin decorative center={lightingCenter} pin={{ id: 'preview', itemId: null, xRatio: 0, yRatio: 0, color: pinPreview.color, kind: pinPreview.kind }} position={pinPreview.position} moving connecting={false} onPointerDown={() => {}} onPalette={() => {}} /></div>}
           <div className="pins-layer">{Object.values(document.pins).sort((a, b) => (a.itemId ? document.items[a.itemId].zIndex : 0) - (b.itemId ? document.items[b.itemId].zIndex : 0)).map(pin => <Pin key={pin.id} center={lightingCenter} pin={pin} position={pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined)} selected={selection?.type === 'item' && !!selection.pinIds?.includes(pin.id)} moving={movingPin === pin.id} connecting={temporary?.target === pin.id} onPointerDown={pinDown} onPalette={pin => { finishEdit(); cancelGesture(); setPalette({ type: 'pin', id: pin.id }); }} />)}</div>
+          <SilverPins center={lightingCenter} pins={[
+            { id: 'supply-silver', x: 376, y: 958 },
+            ...Object.values(document.pins).filter(pin => pin.kind === 'silver').map(pin => ({ id: pin.id, ...pinPosition(pin, pin.itemId ? document.items[pin.itemId] : undefined) })),
+            ...(pinPreview?.kind === 'silver' ? [{ id: 'preview', ...pinPreview.position }] : []),
+          ]} />
         </div>
       </div>
     </main>
@@ -642,6 +675,7 @@ export default function App() {
         : editing ? <><b>esc</b> finish editing</>
         : tapeHeld ? <><b>drag</b> place tape · <b>esc</b> put away</>
         : temporary ? <><b>space</b> connect pin · <b>esc</b> cancel</>
+        : selection?.type === 'pin' && document.pins[selection.id]?.kind === 'silver' ? <>{document.pins[selection.id].itemId ? 'Keeps this item on future weeks' : 'Pin onto an item to keep it on future weeks'} · <b>hold</b> move pin · <b>delete</b> remove</>
         : hintItem?.data.type === 'image' ? <><b>enter</b> frame · <b>space</b> enlarge · <b>double-click</b> crop</>
         : hintItem?.data.type === 'website' ? <><b>enter</b> compact / expand · <b>double-click title</b> edit · <b>esc</b> deactivate</>
         : hintItem?.data.type === 'sticky' && hintItem.data.variant ? <><b>enter</b> change label · <b>double-click</b> edit</>
