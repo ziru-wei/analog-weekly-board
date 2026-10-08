@@ -18,7 +18,17 @@ export function carryPinnedItems(sources: Board[], target: BoardDocument, week: 
         return { ...structuredClone(pin), id: pinId, itemId: id, ...(pin.kind === 'silver' ? { carryId: pin.carryId ?? pin.id } : {}) };
       });
       // Another device may already have created and edited this week's copy.
-      if (items[id]) continue;
+      if (items[id]) {
+        const existing = items[id];
+        const roots = new Set(existing.pins.map(pinId => pins[pinId]).filter(pin => pin?.kind === 'silver').map(pin => pin.carryId ?? pin.id));
+        const missing = copies.filter(pin => pin.kind === 'silver' && !roots.has(pin.carryId ?? pin.id));
+        if (missing.length) {
+          items[id] = { ...existing, pins: [...existing.pins, ...missing.map(pin => pin.id)] };
+          for (const pin of missing) pins[pin.id] = { ...pin, x: (pin.x ?? item.x) + existing.x - item.x, y: (pin.y ?? item.y) + existing.y - item.y };
+          changed = true;
+        }
+        continue;
+      }
       items[id] = { ...structuredClone(item), id, carryOrigin: origin, pins: copies.map(pin => pin.id) };
       for (const pin of copies) pins[pin.id] = pin;
       changed = true;
@@ -32,6 +42,18 @@ export function carryPinnedItems(sources: Board[], target: BoardDocument, week: 
     }
   }
   return changed ? { ...target, items, pins, connections } : target;
+}
+
+/** Retain past content and ordinary pins after handing silver pins to the current week. */
+export function clearPastSilverPins(doc: BoardDocument): BoardDocument {
+  const ids = new Set(Object.values(doc.pins).filter(pin => pin.kind === 'silver').map(pin => pin.id));
+  if (!ids.size) return doc;
+  return {
+    ...doc,
+    pins: Object.fromEntries(Object.entries(doc.pins).filter(([id]) => !ids.has(id))),
+    items: Object.fromEntries(Object.entries(doc.items).map(([id, item]) => [id, item.pins.some(pin => ids.has(pin)) ? { ...item, pins: item.pins.filter(pin => !ids.has(pin)) } : item])),
+    connections: Object.fromEntries(Object.entries(doc.connections).filter(([, rope]) => !ids.has(rope.fromPinId) && !ids.has(rope.toPinId))),
+  };
 }
 
 /** Remove matching later silver pins, preserving every item's content and placement. */

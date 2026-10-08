@@ -3,7 +3,7 @@ import type { BoardDocument } from './model';
 import { type LegacyCurrent, type StoredBoard, readStored, writeBoards, writeConflicts, writeMeta } from './storage';
 import { equivalentBoards } from './cloud/equivalence';
 import { loadWeekPreference } from './weekPreferences';
-import { carryPinnedItems } from './carryForward';
+import { carryPinnedItems, clearPastSilverPins } from './carryForward';
 
 // Weeks always begin on Monday in local time.
 /**
@@ -147,15 +147,26 @@ export function rollover(state: WeekState, now = new Date()): WeekState {
     state = { ...state, week, boards: normalized, conflicts };
   }
   const thisWeek = weekStartISO(now);
-  if (state.week >= thisWeek) return state;
+  if (state.week > thisWeek) return state;
+  const advancing = state.week < thisWeek;
+  const sources = state.boards.filter(b => b.weekStart < thisWeek && Object.values(b.doc.pins).some(pin => pin.kind === 'silver'))
+    .sort((a, b) => b.weekStart.localeCompare(a.weekStart) || byCreation(a, b));
+  if (!advancing && !sources.length) return state;
   let boards = state.boards.filter(b => b.weekStart === thisWeek);
   if (!boards.length) boards = [newBoard(thisWeek, now, emptyBoard(thisWeek), state.deleted[weeklyBoardId(thisWeek)] ? undefined : weeklyBoardId(thisWeek))];
   const first = [...boards].sort(byCreation)[0];
-  const doc = carryPinnedItems(state.boards.filter(b => b.weekStart === state.week).sort(byCreation), first.doc, thisWeek);
+  const doc = carryPinnedItems(sources, first.doc, thisWeek);
   if (doc !== first.doc) boards = boards.map(b => b === first ? { ...b, doc, rev: newRev(), updatedAt: now.getTime() } : b);
   const byId = new Map(state.boards.map(b => [b.id, b]));
+  // Only retire historical pins after the destination has been assembled.
+  for (const source of sources) {
+    const past = clearPastSilverPins(source.doc);
+    if (past !== source.doc) byId.set(source.id, { ...source, doc: past, rev: newRev(), updatedAt: now.getTime() });
+  }
   boards.forEach(b => byId.set(b.id, b));
-  return { ...state, week: thisWeek, boards: [...byId.values()], activeId: [...boards].sort(byCreation).at(-1)!.id };
+  const activeId = advancing || !boards.some(b => b.id === state.activeId) && !state.boards.some(b => b.id === state.activeId)
+    ? [...boards].sort(byCreation).at(-1)!.id : state.activeId;
+  return { ...state, week: thisWeek, boards: [...byId.values()], activeId };
 }
 
 /** A successful upload advances the base even when editing continued during the request. */
