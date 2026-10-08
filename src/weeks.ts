@@ -42,11 +42,9 @@ export const fromISO = (iso: string) => { const [y, m, d] = iso.split('-').map(N
 export const addDays = (iso: string, days: number) => { const d = fromISO(iso); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)); };
 export const weekStartISO = (d: Date) => toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - 1 + 7) % 7)));
 export const weekEndISO = (weekStart: string) => addDays(weekStart, 6);
-/** Retain shorter historical weeks without stretching any week beyond Sunday. */
-export function weekEndOf(weekStart: string, weekStarts: Iterable<string>) {
-  const end = weekEndISO(weekStart);
-  const next = [...weekStarts].filter(s => s > weekStart && s <= end).sort()[0];
-  return next ? addDays(next, -1) : end;
+/** Every week is exactly Monday through Sunday. */
+export function weekEndOf(weekStart: string, _weekStarts: Iterable<string>) {
+  return weekEndISO(weekStartISO(fromISO(weekStart)));
 }
 /** The month a week is listed under: the one holding most of the days it shows. */
 export function weekMonth(from: string, end: string) {
@@ -55,11 +53,11 @@ export function weekMonth(from: string, end: string) {
 }
 
 const fmt = (iso: string, withYear: boolean) => fromISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
-export function weekLabel(weekStart: string, startedOn = weekStart, end = weekEndISO(weekStart)) {
-  const from = startedOn > weekStart && startedOn <= end ? startedOn : weekStart;
+export function weekLabel(weekStart: string, _startedOn = weekStart, end = weekEndISO(weekStart)) {
+  const from = weekStartISO(fromISO(weekStart));
+  end = weekEndISO(from);
   return `${fmt(from, false)} – ${fmt(end, fromISO(end).getFullYear() !== new Date().getFullYear() || fromISO(from).getFullYear() !== fromISO(end).getFullYear())}`;
 }
-export const isPartial = (weekStart: string, startedOn: string) => startedOn > weekStart;
 
 export function emptyBoard(weekStart: string): BoardDocument {
   return { board: { id: `week-${weekStart}`, title: weekLabel(weekStart), width: 1600, height: 1000 }, items: {}, pins: {}, connections: {} };
@@ -68,8 +66,9 @@ export const isEmpty = (doc: BoardDocument) => Object.keys(doc.items).length ===
 /** The board every week starts with. Its id is shared by all devices, so their automatic boards merge into one. */
 export const weeklyBoardId = (weekStart: string) => `week-${weekStart}`;
 export function newBoard(weekStart: string, now = new Date(), doc = emptyBoard(weekStart), id = `board-${crypto.randomUUID()}`): Board {
-  const rev = newRev(), today = toISO(now);
-  return { id, weekStart, startedOn: today > weekStart ? today : weekStart, createdAt: now.getTime(), updatedAt: 0, rev, baseRev: rev, doc };
+  weekStart = weekStartISO(fromISO(weekStart));
+  const rev = newRev();
+  return { id, weekStart, startedOn: weekStart, createdAt: now.getTime(), updatedAt: 0, rev, baseRev: rev, doc };
 }
 
 export const activeBoard = (state: WeekState) => state.boards.find(b => b.id === state.activeId)!;
@@ -132,17 +131,17 @@ export function resolveBoardConflict(state: WeekState, id: string, choice: 'rest
 
 /** When a new week begins, start its board and open it. Boards from earlier weeks stay as they are. */
 export function rollover(state: WeekState, now = new Date()): WeekState {
-  // Project legacy weekday keys into Monday weeks without changing board/item identities.
+  // Force every board into a full Monday–Sunday week.
   const week = weekStartISO(fromISO(state.week));
   const normalized = state.boards.map(board => {
     const start = weekStartISO(fromISO(board.weekStart));
-    if (start === board.weekStart) return board;
+    if (start === board.weekStart && board.startedOn === start && !board.weekEnd) return board;
     const { weekEnd: _legacyEnd, ...rest } = board;
-    return { ...rest, weekStart: start };
+    return { ...rest, weekStart: start, startedOn: start };
   });
   const conflicts = state.conflicts.map(copy => {
     const start = weekStartISO(fromISO(copy.weekStart));
-    return start === copy.weekStart ? copy : { ...copy, weekStart: start };
+    return start === copy.weekStart && copy.startedOn === start ? copy : { ...copy, weekStart: start, startedOn: start };
   });
   if (week !== state.week || normalized.some((b, i) => b !== state.boards[i]) || conflicts.some((c, i) => c !== state.conflicts[i])) {
     state = { ...state, week, boards: normalized, conflicts };
@@ -206,7 +205,7 @@ export function reconcile(local: WeekState, remote: Remote, now = new Date()): W
 export function normalizeBoard(raw: StoredBoard): Board {
   const rev = raw.rev ?? `legacy-${raw.updatedAt ?? 0}`;
   return {
-    id: raw.id, weekStart: weekStartISO(fromISO(raw.weekStart)), startedOn: raw.startedOn ?? raw.weekStart, ...(raw.weekEnd && weekStartISO(fromISO(raw.weekStart)) === raw.weekStart ? { weekEnd: raw.weekEnd } : {}),
+    id: raw.id, weekStart: weekStartISO(fromISO(raw.weekStart)), startedOn: weekStartISO(fromISO(raw.weekStart)),
     createdAt: raw.createdAt ?? (Date.parse(raw.archivedAt ?? '') || fromISO(raw.weekStart).getTime()), updatedAt: raw.updatedAt ?? 0,
     rev, baseRev: raw.baseRev ?? '', doc: raw.doc,
   };

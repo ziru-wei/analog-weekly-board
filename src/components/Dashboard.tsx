@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { type Board, type WeekState, addDays, fromISO, isPartial, weekEndOf, weekStartISO, weekLabel, weekMonth } from '../weeks';
+import { type Board, type WeekState, addDays, fromISO, weekEndOf, weekStartISO, weekLabel, weekMonth } from '../weeks';
 import { BoardPreview } from './BoardPreview';
 import { ConflictReview } from './ConflictReview';
 import { CloudPanel } from './CloudPanel';
@@ -140,12 +140,12 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
   const weeks = new Map<string, Board[]>([[state.week, []]]);
   for (const board of state.boards) weeks.set(board.weekStart, [...(weeks.get(board.weekStart) ?? []), board]);
   const weekStarts = [...weeks.keys()];
-  // Monday groups share a Sunday end; the current week always shows the full calendar span.
+  // Every board belongs to a full Monday–Sunday week.
   const months = new Map<string, { week: string; boards: Board[]; startedOn: string; label: string; upcoming?: number }[]>();
   for (const week of weekStarts.sort().reverse()) {
     const boards = [...weeks.get(week)!].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
-    const startedOn = week === state.week ? week : boards.reduce((first, b) => b.startedOn < first ? b.startedOn : first, boards[0]?.startedOn ?? week);
-    const end = boards.find(b => b.weekEnd)?.weekEnd ?? weekEndOf(week, weekStarts);
+    const startedOn = week;
+    const end = weekEndOf(week, weekStarts);
     const month = weekMonth(startedOn > week ? startedOn : week, end);
     months.set(month, [...(months.get(month) ?? []), { week, boards, startedOn, label: weekLabel(week, startedOn, end) }]);
   }
@@ -172,7 +172,7 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
       {[...months].map(([month, monthWeeks]) => <section key={month} className="dash-month" aria-label={monthLabel(month)}>
         <h2>{monthLabel(month)}</h2>
         <div className="dash-weeks">
-          {[...monthWeeks].sort((a, b) => a.week.localeCompare(b.week)).map(({ week, boards, startedOn, label, upcoming }) => {
+          {[...monthWeeks].sort((a, b) => a.week.localeCompare(b.week)).map(({ week, boards, label, upcoming }) => {
             if (upcoming) return <div key={week} className="dash-week future" role="group" aria-label={`Week of ${label}, not started yet`}>
               <h3 className="dash-week-label"><b>{label}</b></h3>
               {upcoming === 1
@@ -184,7 +184,7 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
                 onClick={event => {
                   if (!boards.length) { onAdd(); return; }
                   if (event.button === 0 && event.detail > 0) requestExtraBoard();
-                }}>This week</button> : isPartial(week, startedOn) && <em>Partial week</em>}</h3>
+                }}>This week</button> : null}</h3>
               <div className="dash-board-stack">{boards.map((board, index) => {
                 const open = board.id === state.activeId;
                 return <div key={board.id} style={{ '--stack-order': boards.length - index } as CSSProperties} className={`dash-card ${open ? 'current' : ''}`}>
