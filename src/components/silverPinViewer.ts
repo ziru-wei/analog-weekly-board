@@ -71,8 +71,8 @@ export function createSilverPinViewer(canvas: HTMLCanvasElement) {
     color: 0xe2e0d5, metalness: 1, roughness: .48,
     map: worn.color, roughnessMap: worn.roughness, bumpMap: worn.bump, bumpScale: .06,
   });
-  const geometry = new SphereGeometry(11, 48, 32);
-  const shadowGeometry = new CircleGeometry(16, 32);
+  const geometry = new SphereGeometry(16.5, 48, 32);
+  const shadowGeometry = new CircleGeometry(24, 32);
   const shadowMaterial = new MeshBasicMaterial({ map: makeContactShadow(), transparent: true, depthWrite: false, toneMapped: false });
   const light = new PointLight(0xffffff, 10, 0, 0);
   const add = (object: unknown) => scene.addObject(object as IObject3D, { autoCenter: false, autoScale: false, addToRoot: true });
@@ -87,7 +87,7 @@ export function createSilverPinViewer(canvas: HTMLCanvasElement) {
     pool.forEach(({ head, shadow }, index) => {
       const pin = pins[index]; head.visible = shadow.visible = !!pin;
       if (!pin) return;
-      head.position.set(pin.x, 1000 - pin.y, 9);
+      head.position.set(pin.x, 1000 - pin.y, 13.5);
       head.rotation.set(.4, variation(pin.id) * Math.PI * 2, .1);
       shadow.position.set(pin.x + 2, 1000 - pin.y - 2.5, 0);
     });

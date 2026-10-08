@@ -176,7 +176,7 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
             if (upcoming) return <div key={week} className="dash-week future" role="group" aria-label={`Week of ${label}, not started yet`}>
               <h3 className="dash-week-label"><b>{label}</b></h3>
               {upcoming === 1
-                ? <button key={shake} className={`dash-curtain ${shake ? 'shaking' : ''}`} aria-label={`Next week's board opens on ${label.split(' – ')[0]}`} title={`Opens on ${label.split(' – ')[0]}`} onClick={() => setShake(n => n + 1)}><Curtain /></button>
+                ? <div className="dash-curtain-frame"><button key={shake} className={`dash-curtain ${shake ? 'shaking' : ''}`} aria-label={`Next week's board opens on ${label.split(' – ')[0]}`} title={`Opens on ${label.split(' – ')[0]}`} onClick={() => setShake(n => n + 1)}><Curtain /></button></div>
                 : <div className="dash-future-slot" />}
             </div>;
             return <div key={week} className={`dash-week ${week === state.week ? 'this-week' : ''}`} role="group" aria-label={`Week of ${label}`}>

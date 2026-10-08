@@ -16,7 +16,7 @@ export function Pin({ pin, position, center = { x: 800, y: 500 }, moving, connec
   const shadowLength = Math.min(5.5, distance / 130);
   const shadowAngle = Math.atan2(lightY, lightX) * 180 / Math.PI;
 
-  return <button className={`pin ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''} ${selected ? 'group-selected' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
+  return <button className={`pin ${pin.kind === 'silver' ? 'silver-pin' : ''} ${moving ? 'repositioning' : ''} ${connecting ? 'connect-target' : ''} ${selected ? 'group-selected' : ''}`} data-pin-id={decorative ? undefined : pin.id} tabIndex={decorative ? -1 : undefined}
     aria-label={label ?? (pin.kind === 'silver' ? 'Silver pushpin: keeps this item on future weeks; hold to move; double-click to remove' : 'Pushpin: drag to connect; hold to move; double-click to remove; right-click to recolor')}
     style={{ left: position.x, top: position.y }}
     onPointerDown={event => onPointerDown(event, pin)} onDoubleClick={event => event.stopPropagation()}

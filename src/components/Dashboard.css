@@ -87,10 +87,11 @@ button.dash-open:hover .dash-thumb-frame::after { box-shadow: inset 0 0 0 2px #b
 
 /* Weeks of this month that haven't started: a faint empty slot; next week waits behind a stage curtain. */
 .dash-week.future .dash-week-label b { color: #6f6b62; font-weight: 400; }
-.dash-future-slot, .dash-curtain { width: 100%; aspect-ratio: 16 / 10; border-radius: 4px; background: #ffffff06; }
-.dash-curtain { display: block; width: 100%; aspect-ratio: 16 / 10; padding: 0; background: #875f3d; overflow: hidden; box-shadow: 0 1px 0 #b58c5e, 0 2px 0 #8a6538, 0 3px 0 #5b3f22, 0 5px 3px #0006, 0 12px 20px #00000059; }
+.dash-future-slot { width: 100%; aspect-ratio: 16 / 10; border-radius: 4px; background: #ffffff06; }
+.dash-curtain-frame { position: relative; width: 100%; aspect-ratio: 16 / 10; flex-shrink: 0; border-radius: 4px; background: #875f3d; box-shadow: 0 1px 0 #b58c5e, 0 2px 0 #8a6538, 0 3px 0 #5b3f22, 0 5px 3px #0006, 0 12px 20px #00000059; }
+.dash-curtain { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 0; background: #875f3d; border-radius: inherit; overflow: hidden; }
 .dash-curtain:focus-visible { outline: 2px solid #d9c79b; outline-offset: 3px; }
-.curtain-sketch { display: block; width: 100%; height: 100%; overflow: visible; }
+.curtain-sketch { position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: hidden; }
 .curtain-left, .curtain-right { transform-box: fill-box; transform-origin: 50% 0; }
 .dash-curtain.shaking .curtain-left { animation: curtain-sway .6s ease-out; transform-origin: 50% 0; }
 .dash-curtain.shaking .curtain-right { animation: curtain-sway .6s ease-out reverse; transform-origin: 50% 0; }

@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Enlarge WebGL silver pins by 50% and their hit areas; give the curtain its own full-size background frame.
+
 - Catch up silver-pinned items from all overdue boards into the current week, retaining silver pins on the new copies and removing them from past boards. Repeat each week until the current pin is removed.
 
 - Force all boards into full Monday–Sunday weeks, remove partial-week dates, and preserve board contents and silver-pin carry-over.
