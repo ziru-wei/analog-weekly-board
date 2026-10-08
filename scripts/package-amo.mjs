@@ -18,7 +18,7 @@ rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true 
 execFileSync('node', ['scripts/build-extension.mjs', 'firefox'], { stdio: 'inherit' });
 const root = process.cwd(), extZip = `${root}/${out}/analog-weekly-board-firefox-${version}.zip`, srcZip = `${root}/${out}/analog-weekly-board-source-${version}.zip`;
 execFileSync('zip', ['-r', '-q', extZip, '.', '-x', '.DS_Store', '*/.DS_Store'], { cwd: 'dist-ext/firefox' });
-execFileSync('zip', ['-r', '-q', srcZip, '.', '-x', 'node_modules/*', 'dist/*', 'dist-ext/*', 'release/*', '.git/*', '.env', '.env.*', '*.pem', '*.DS_Store', '*.tsbuildinfo', 'worker/.wrangler/*', 'worker/.dev.vars*', 'developer_reminder.md', 'web-ext-artifacts/*'], { cwd: root });
+execFileSync('zip', ['-r', '-q', srcZip, '.', '-x', 'node_modules/*', 'dist/*', 'dist-ext/*', 'release/*', '.git/*', '.env', '.env.*', '*.pem', '*.DS_Store', '*.tsbuildinfo', 'worker/.wrangler/*', 'worker/.dev.vars*', 'developer_reminder.md', 'tests/*', 'coverage/*', 'test-results/*', 'playwright-report/*', 'web-ext-artifacts/*'], { cwd: root });
 
 writeFileSync(`${out}/REVIEWER_NOTES.md`, `# Notes to reviewer — Analog Weekly Board ${version}
 

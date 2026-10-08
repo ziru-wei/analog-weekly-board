@@ -1,9 +1,12 @@
 # Changelog
 
-## 0.1.3
+## 0.1.3.1
 
+- Prepare refreshed Chrome, Firefox and AMO review packages.
 - Fix weeks to Monday–Sunday and remove the calendar preference, ignoring legacy local and cloud settings.
 - Fill the next-week curtain board background and widen the theatre curtain to cover its full width.
+
+## 0.1.3
 
 - Support multiple boards per week and migrate existing archives without losing their content. Keep one editing tab active at a time.
 - Add Command/Ctrl+A to select all cards, pins and strings; copy and paste complete layouts between boards with independent IDs and one-step undo.
