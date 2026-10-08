@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { type Board, type WeekState, addDays, fromISO, isPartial, weekEndOf, weekLabel, weekMonth } from '../weeks';
+import { type Board, type WeekState, addDays, fromISO, isPartial, weekEndOf, weekStartISO, weekLabel, weekMonth } from '../weeks';
 import { BoardPreview } from './BoardPreview';
 import { ConflictReview } from './ConflictReview';
 import { CloudPanel } from './CloudPanel';
@@ -63,10 +63,11 @@ function Curtain() {
   const id = useId().replace(/:/g, ''), wobble = `url(#curtain-${id})`;
   const panel = 'M13 21C40 18 85 20 119 22L118 137C110 139 103 138 96 136C88 139 80 139 72 136C64 139 56 139 48 137C35 140 23 140 13 138C15 100 12 62 13 21Z';
   const folds = [21, 41, 62, 84, 105];
-  return <svg className="curtain-sketch" viewBox="0 0 240 150" fill="none" aria-hidden="true">
+  return <svg className="curtain-sketch" viewBox="9 0 222 150" preserveAspectRatio="none" fill="none" aria-hidden="true">
     <defs>
       <filter id={`curtain-${id}`} x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".045" numOctaves="2" seed="7" /><feDisplacementMap in="SourceGraphic" scale=".45" /></filter>
     </defs>
+    <rect x="9" width="222" height="150" fill="#875f3d" />
     <g filter={wobble} strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 20H228V138H12Z" fill="#311923" />
       {[false, true].map(right => <g key={String(right)} className={right ? 'curtain-right' : 'curtain-left'}>
@@ -152,7 +153,7 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
   const thisMonth = [...months].find(([, list]) => list.some(w => w.week === state.week))![0];
   const upcoming = [];
   for (let start = state.week, i = 1; i <= 6; i++) {
-    const week = addDays(weekEndOf(start, weekStarts), 1), end = weekEndOf(week, []);
+    const week = addDays(weekStartISO(fromISO(start)), 7), end = weekEndOf(week, []);
     if (weekMonth(week, end) !== thisMonth) break;
     upcoming.push({ week, boards: [], startedOn: week, label: weekLabel(week, week, end), upcoming: i });
     start = week;

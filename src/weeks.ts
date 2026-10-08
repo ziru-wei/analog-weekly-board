@@ -2,10 +2,10 @@ import { createDemo } from './demo';
 import type { BoardDocument } from './model';
 import { type LegacyCurrent, type StoredBoard, readStored, writeBoards, writeConflicts, writeMeta } from './storage';
 import { equivalentBoards } from './cloud/equivalence';
-import { getWeekPreference, loadWeekPreference } from './weekPreferences';
+import { loadWeekPreference } from './weekPreferences';
 import { carryPinnedItems } from './carryForward';
 
-// Weeks use the selected starting weekday in local time (Monday by default).
+// Weeks always begin on Monday in local time.
 /**
  * One corkboard. A week has one or more boards; any of them can be opened for editing.
  * `rev` identifies this exact content; `baseRev` is the cloud version it was last in sync with ('' = never synced).
@@ -40,15 +40,13 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const fromISO = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 export const addDays = (iso: string, days: number) => { const d = fromISO(iso); return toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)); };
-export const weekStartISO = (d: Date, day = getWeekPreference().day) => toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - day + 7) % 7)));
+export const weekStartISO = (d: Date) => toISO(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() - 1 + 7) % 7)));
 export const weekEndISO = (weekStart: string) => addDays(weekStart, 6);
-/**
- * A week runs until the next week begins. When the starting weekday changes, the week before the change is shorter
- * or longer than seven days (it lasts until the new weekday). A gap of a week or more means no board was made then.
- */
-export function weekEndOf(weekStart: string, weekStarts: Iterable<string>, effectiveFrom = getWeekPreference().effectiveFrom) {
-  const next = [...weekStarts, ...(effectiveFrom ? [effectiveFrom] : [])].filter(s => s > weekStart).sort()[0];
-  return next && next <= addDays(weekStart, 13) ? addDays(next, -1) : weekEndISO(weekStart);
+/** Retain shorter historical weeks without stretching any week beyond Sunday. */
+export function weekEndOf(weekStart: string, weekStarts: Iterable<string>) {
+  const end = weekEndISO(weekStart);
+  const next = [...weekStarts].filter(s => s > weekStart && s <= end).sort()[0];
+  return next ? addDays(next, -1) : end;
 }
 /** The month a week is listed under: the one holding most of the days it shows. */
 export function weekMonth(from: string, end: string) {
@@ -135,8 +133,6 @@ export function resolveBoardConflict(state: WeekState, id: string, choice: 'rest
 /** When a new week begins, start its board and open it. Boards from earlier weeks stay as they are. */
 export function rollover(state: WeekState, now = new Date()): WeekState {
   const thisWeek = weekStartISO(now);
-  const { effectiveFrom } = getWeekPreference();
-  if (effectiveFrom && thisWeek < effectiveFrom) return state;
   if (state.week >= thisWeek) return state;
   let boards = state.boards.filter(b => b.weekStart === thisWeek);
   if (!boards.length) boards = [newBoard(thisWeek, now, emptyBoard(thisWeek), state.deleted[weeklyBoardId(thisWeek)] ? undefined : weeklyBoardId(thisWeek))];

@@ -1,18 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { cloud, useCloud } from '../cloud/sync';
 import { SyncStatus } from './SyncStatus';
-import { setWeekStartDay, useWeekPreference } from '../weekPreferences';
-import { fromISO } from '../weeks';
-
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 export function CloudPanel({ unresolvedCount = 0, onSolve }: { unresolvedCount?: number; onSolve?: () => void }) {
   const state = useCloud();
   const [open, setOpen] = useState(false);
-  const preference = useWeekPreference();
-  const [savingDay, setSavingDay] = useState(false);
-  const [preferenceError, setPreferenceError] = useState('');
-  const pending = preference.effectiveFrom && fromISO(preference.effectiveFrom) > new Date() ? fromISO(preference.effectiveFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -37,14 +28,7 @@ export function CloudPanel({ unresolvedCount = 0, onSolve }: { unresolvedCount?:
         <button disabled={state.status === 'connecting'} onClick={() => { setOpen(false); void cloud.signOut(); }}>Sign out</button>
       </> : <button disabled={busy} onClick={() => void cloud.signIn()}>{busy ? 'Connecting…' : 'Sign in with Google'}</button>}
       {state.error && <p className="cloud-account-error" role="alert">{state.error}</p>}
-      <div className="cloud-account-setting">
-        <label>Week begins on <select aria-label="Week begins on" value={preference.day} disabled={savingDay} onChange={async event => {
-          const day = Number(event.target.value); setSavingDay(true); setPreferenceError('');
-          try { await setWeekStartDay(day); cloud.changed(); } catch { setPreferenceError('Could not save week preference. Try again.'); } finally { setSavingDay(false); }
-        }}>{DAYS.map((day, i) => <option key={day} value={i}>{day}</option>)}</select></label>
-        {pending && <p>Starts with the week of {pending}.</p>}
-        {preferenceError && <p className="cloud-account-error" role="alert">{preferenceError}</p>}
-      </div>
+
     </div>}
   </div>;
 }

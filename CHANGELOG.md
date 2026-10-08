@@ -2,6 +2,9 @@
 
 ## 0.1.3
 
+- Fix weeks to Monday–Sunday and remove the calendar preference, ignoring legacy local and cloud settings.
+- Fill the next-week curtain board background and widen the theatre curtain to cover its full width.
+
 - Support multiple boards per week and migrate existing archives without losing their content. Keep one editing tab active at a time.
 - Add Command/Ctrl+A to select all cards, pins and strings; copy and paste complete layouts between boards with independent IDs and one-step undo.
 - Order weeks from oldest to newest within each Dashboard month. Stack boards with overlapping previews, clearer shadows and hover feedback.
