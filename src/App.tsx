@@ -150,6 +150,8 @@ export default function App() {
   const pointer = useRef({ x: 0, y: 0 });
   const doubleClickStartedOnPin = useRef(false);
   const doubleClickStartedOutside = useRef(false);
+  const doubleClickItemId = useRef<string | null>(null);
+  const doubleClickStartedOnBlank = useRef(false);
   const doubleClickPinId = useRef<string | null>(null);
   useEffect(() => {
     const track = (event: MouseEvent) => { pointer.current = { x: event.clientX, y: event.clientY }; };
@@ -225,10 +227,10 @@ export default function App() {
   };
   const itemAt = (event: { clientX: number; clientY: number }) => window.document.elementsFromPoint(event.clientX, event.clientY)
     .map(element => element.closest<HTMLElement>('[data-item-id]')?.dataset.itemId).find(Boolean);
-  const capture = (event: ReactPointerEvent, stable = false) => {
+  const capture = (event: ReactPointerEvent) => {
     // Pins can change DOM order, and active embeds become inert during dragging.
     // Capture on the workspace so those changes cannot interrupt the gesture.
-    const element = stable ? viewport.current! : event.currentTarget;
+    const element = viewport.current!;
     element.setPointerCapture(event.pointerId); captureTarget.current = { element, pointerId: event.pointerId }; setActiveGesture(true);
   };
   const selectItem = (id: string) => {
@@ -250,19 +252,19 @@ export default function App() {
     setSelection({ type: 'item', id: item.id, ids });
     commands.updateItem(item.id, { zIndex: Math.max(0, ...Object.values(store.getSnapshot().items).map(target => target.zIndex)) + 1 });
     const items = ids.map(id => store.getSnapshot().items[id]).filter(Boolean);
-    gesture.current = { kind: 'drag', start: point(event), item, items, moved: false, duplicate: event.altKey }; capture(event, item.data.type === 'website');
+    gesture.current = { kind: 'drag', start: point(event), item, items, moved: false, duplicate: event.altKey }; capture(event);
   };
   const resizeDown = (event: ReactPointerEvent, item: BoardItem, side?: 'left' | 'right') => {
     if (event.button !== 0) return;
     event.preventDefault(); event.stopPropagation(); commands.beginTransaction();
-    gesture.current = { kind: 'resize', start: point(event), item, side, moved: false }; capture(event, item.data.type === 'website');
+    gesture.current = { kind: 'resize', start: point(event), item, side, moved: false }; capture(event);
   };
   const pinDown = (event: ReactPointerEvent, pin: PinModel) => {
     if (event.button !== 0 || gesture.current) return;
     event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null); setSelection({ type: 'pin', id: pin.id });
     commands.beginTransaction();
     const g: Gesture = { kind: 'pin', start: point(event), pin, mode: 'pending', moved: false };
-    gesture.current = g; capture(event, true);
+    gesture.current = g; capture(event);
     holdTimer.current = setTimeout(() => {
       if (gesture.current !== g || g.moved) return;
       g.mode = 'move'; setMovingPin(pin.id);
@@ -270,6 +272,7 @@ export default function App() {
   };
   const pointerMove = (event: ReactPointerEvent) => {
     const g = gesture.current; if (!g) return;
+    if (captureTarget.current && event.pointerId !== captureTarget.current.pointerId) return;
     if (g.kind === 'pin-supply') {
       const p = point(event);
       if (Math.hypot(p.x - g.start.x, p.y - g.start.y) * scale > 5) g.moved = true;
@@ -349,6 +352,9 @@ export default function App() {
   };
   const pointerUp = (event: ReactPointerEvent) => {
     const g = gesture.current; if (!g) return;
+    // A fast release can arrive before a move event; apply its final position first.
+    if (captureTarget.current && event.pointerId !== captureTarget.current.pointerId) return;
+    pointerMove(event);
     if (g.kind === 'pin-supply') {
       const p = point(event);
       if (g.moved && p.x >= 0 && p.y >= 0 && p.x <= 1600 && p.y <= 1000) {
@@ -586,6 +592,8 @@ export default function App() {
         const rect = board.current?.getBoundingClientRect();
         const onBoard = rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
         doubleClickStartedOutside.current = event.target === event.currentTarget && !onBoard;
+        doubleClickItemId.current = (event.target as Element).closest<HTMLElement>('[data-item-id]')?.dataset.itemId ?? null;
+        doubleClickStartedOnBlank.current = isBlank(event.target);
         const pinTarget = (event.target as Element).closest<HTMLElement>('.pin');
         doubleClickStartedOnPin.current = !!pinTarget;
         doubleClickPinId.current = pinTarget?.dataset.pinId ?? null;
@@ -606,6 +614,15 @@ export default function App() {
           event.preventDefault(); event.stopPropagation();
           const id = doubleClickPinId.current, pin = id ? store.getSnapshot().pins[id] : undefined;
           if (!tapeHeld && pin) { commands.deletePin(pin.id); maybeStopLaterCarry([pin]); setSelection(null); setPalette(null); }
+        } else if (event.target === event.currentTarget && !doubleClickStartedOutside.current) {
+          // Stable pointer capture retargets double-clicks; keep their original board action.
+          event.preventDefault(); event.stopPropagation();
+          const item = doubleClickItemId.current ? store.getSnapshot().items[doubleClickItemId.current] : undefined;
+          if (item && event.shiftKey) {
+            finishEdit(); const p = localPoint(point(event), item); commands.createPin(item.id, p.x / item.width, p.y / item.height); sound.play('pin');
+          } else if (item?.data.type === 'sticky' || item?.data.type === 'website') startEdit(item.id);
+          else if (item?.data.type === 'image' && cropping !== item.id) { finishEdit(); setSelection({ type: 'item', id: item.id }); setCropping(item.id); }
+          else if (!item && doubleClickStartedOnBlank.current) addNote(point(event));
         }
       }}
       onDragOver={event => event.preventDefault()} onDrop={event => event.preventDefault()}
@@ -629,7 +646,7 @@ export default function App() {
           <PinSupply center={lightingCenter} onDrag={(event, color, pinKind) => {
             if (event.button !== 0 || gesture.current) return;
             event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null); commands.beginTransaction();
-            gesture.current = { kind: 'pin-supply', start: point(event), color, pinKind, moved: false }; capture(event, true);
+            gesture.current = { kind: 'pin-supply', start: point(event), color, pinKind, moved: false }; capture(event);
           }} />
           <div className="items-layer">{Object.values(document.items).filter(item => !(item.data.type === 'sticky' && item.data.variant === 'vellum')).map(renderItem)}</div>
           <div className="vellum-layer">{Object.values(document.items).filter(item => item.data.type === 'sticky' && item.data.variant === 'vellum').map(renderItem)}</div>

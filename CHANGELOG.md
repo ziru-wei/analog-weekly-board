@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Finalize all drag gestures at pointer-release coordinates and capture on the stable workspace. Prevent fast supply drops, card moves, resizes, rope connections and tape gestures from disappearing or missing their final position; preserve double-click editing and deletion.
+
 - Prevent pointer-captured double clicks on board objects from opening Dashboard; require a click starting outside the board and remaining outside.
 
 - Enlarge WebGL silver pins by 50% and their hit areas; give the curtain its own full-size background frame.
