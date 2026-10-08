@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Prevent pointer-captured double clicks on board objects from opening Dashboard; require a click starting outside the board and remaining outside.
+
 - Enlarge WebGL silver pins by 50% and their hit areas; give the curtain its own full-size background frame.
 
 - Catch up silver-pinned items from all overdue boards into the current week, retaining silver pins on the new copies and removing them from past boards. Repeat each week until the current pin is removed.

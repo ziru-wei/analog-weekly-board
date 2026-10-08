@@ -149,6 +149,7 @@ export default function App() {
   }, []);
   const pointer = useRef({ x: 0, y: 0 });
   const doubleClickStartedOnPin = useRef(false);
+  const doubleClickStartedOutside = useRef(false);
   const doubleClickPinId = useRef<string | null>(null);
   useEffect(() => {
     const track = (event: MouseEvent) => { pointer.current = { x: event.clientX, y: event.clientY }; };
@@ -580,8 +581,11 @@ export default function App() {
   const hintItem = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
   return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''} ${canvasReady ? '' : 'canvas-loading'}`} aria-busy={!canvasReady}>
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
-    <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && !tapeHeld) { finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
+    <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && doubleClickStartedOutside.current && !tapeHeld) { const rect = board.current?.getBoundingClientRect(); if (rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) return; finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
       onPointerDownCapture={event => {
+        const rect = board.current?.getBoundingClientRect();
+        const onBoard = rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        doubleClickStartedOutside.current = event.target === event.currentTarget && !onBoard;
         const pinTarget = (event.target as Element).closest<HTMLElement>('.pin');
         doubleClickStartedOnPin.current = !!pinTarget;
         doubleClickPinId.current = pinTarget?.dataset.pinId ?? null;
