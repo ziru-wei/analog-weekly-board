@@ -202,9 +202,20 @@ export default function App() {
     sound.play(cue);
   };
   const finishEdit = () => { if (editing) commands.finishTransaction(); setEditing(null); };
+  const finishTape = (g: Extract<Gesture, { kind: 'tape' }>) => {
+    if (g.moved) {
+      const dx = g.end.x - g.start.x, dy = g.end.y - g.start.y;
+      const length = Math.max(8, Math.hypot(dx, dy));
+      commands.createItem({ type: 'tape' }, { x: (g.start.x + g.end.x) / 2 - length / 2, y: (g.start.y + g.end.y) / 2 - TAPE_WIDTH / 2 }, { width: length, height: TAPE_WIDTH }, Math.atan2(dy, dx) * 180 / Math.PI);
+      sound.play('tear');
+    }
+    commands.finishTransaction(g.moved); clearGesture();
+  };
   const keepInterruptedDrag = () => {
     const g = gesture.current;
-    if (g?.moved && (g.kind === 'drag' || g.kind === 'resize' || (g.kind === 'supply' && g.item))) {
+    if (g?.kind === 'tape' && g.moved) {
+      lastPointerWasDrag.current = true; finishTape(g);
+    } else if (g?.moved && (g.kind === 'drag' || g.kind === 'resize' || (g.kind === 'supply' && g.item))) {
       lastPointerWasDrag.current = true; commands.finishTransaction(true); clearGesture(); setPalette(null);
     } else cancelGesture();
   };
@@ -289,7 +300,7 @@ export default function App() {
     if (g.kind === 'tape') {
       const p = point(event);
       g.end = { x: clamp(p.x, TAPE_WIDTH / 2, 1600 - TAPE_WIDTH / 2), y: clamp(p.y, TAPE_WIDTH / 2, 1000 - TAPE_WIDTH / 2) };
-      g.moved = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y) > 8;
+      if (Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y) > 8) g.moved = true;
       if (g.moved && !g.sounded) { sound.play('tape'); g.sounded = true; }
       setTapePreview({ start: g.start, end: g.end }); return;
     }
@@ -371,14 +382,7 @@ export default function App() {
       } else commands.cancelTransaction();
       clearGesture(); return;
     }
-    if (g.kind === 'tape') {
-      if (g.moved) {
-        const length = Math.hypot(g.end.x - g.start.x, g.end.y - g.start.y);
-        commands.createItem({ type: 'tape' }, { x: (g.start.x + g.end.x) / 2 - length / 2, y: (g.start.y + g.end.y) / 2 - TAPE_WIDTH / 2 }, { width: length, height: TAPE_WIDTH }, Math.atan2(g.end.y - g.start.y, g.end.x - g.start.x) * 180 / Math.PI);
-        sound.play('tear');
-      }
-      commands.finishTransaction(g.moved); clearGesture(); return;
-    }
+    if (g.kind === 'tape') { finishTape(g); return; }
     if (g.kind === 'supply') {
       if (!g.item) { commands.cancelTransaction(); setSelection(null); clearGesture(); return; }
       const colors = PAPER_COLORS.filter(color => color !== g.color);

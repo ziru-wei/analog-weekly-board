@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Preserve drawn tape when pointer capture or window focus is interrupted; keep completed tape drags that return near their starting point. Escape still cancels.
+
 - Suppress double-click actions after real drags, keep sticky drops released beyond the board edge, and preserve moved cards when capture or window focus is interrupted. Remove the dark stage rectangle behind the curtain fabric.
 
 - Finalize all drag gestures at pointer-release coordinates and capture on the stable workspace. Prevent fast supply drops, card moves, resizes, rope connections and tape gestures from disappearing or missing their final position; preserve double-click editing and deletion.
