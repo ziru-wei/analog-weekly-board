@@ -56,7 +56,7 @@ export function weekMonth(from: string, end: string) {
 
 const fmt = (iso: string, withYear: boolean) => fromISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
 export function weekLabel(weekStart: string, startedOn = weekStart, end = weekEndISO(weekStart)) {
-  const from = startedOn > weekStart ? startedOn : weekStart;
+  const from = startedOn > weekStart && startedOn <= end ? startedOn : weekStart;
   return `${fmt(from, false)} – ${fmt(end, fromISO(end).getFullYear() !== new Date().getFullYear() || fromISO(from).getFullYear() !== fromISO(end).getFullYear())}`;
 }
 export const isPartial = (weekStart: string, startedOn: string) => startedOn > weekStart;
@@ -132,6 +132,21 @@ export function resolveBoardConflict(state: WeekState, id: string, choice: 'rest
 
 /** When a new week begins, start its board and open it. Boards from earlier weeks stay as they are. */
 export function rollover(state: WeekState, now = new Date()): WeekState {
+  // Project legacy weekday keys into Monday weeks without changing board/item identities.
+  const week = weekStartISO(fromISO(state.week));
+  const normalized = state.boards.map(board => {
+    const start = weekStartISO(fromISO(board.weekStart));
+    if (start === board.weekStart) return board;
+    const { weekEnd: _legacyEnd, ...rest } = board;
+    return { ...rest, weekStart: start };
+  });
+  const conflicts = state.conflicts.map(copy => {
+    const start = weekStartISO(fromISO(copy.weekStart));
+    return start === copy.weekStart ? copy : { ...copy, weekStart: start };
+  });
+  if (week !== state.week || normalized.some((b, i) => b !== state.boards[i]) || conflicts.some((c, i) => c !== state.conflicts[i])) {
+    state = { ...state, week, boards: normalized, conflicts };
+  }
   const thisWeek = weekStartISO(now);
   if (state.week >= thisWeek) return state;
   let boards = state.boards.filter(b => b.weekStart === thisWeek);
@@ -191,7 +206,7 @@ export function reconcile(local: WeekState, remote: Remote, now = new Date()): W
 export function normalizeBoard(raw: StoredBoard): Board {
   const rev = raw.rev ?? `legacy-${raw.updatedAt ?? 0}`;
   return {
-    id: raw.id, weekStart: raw.weekStart, startedOn: raw.startedOn ?? raw.weekStart, ...(raw.weekEnd ? { weekEnd: raw.weekEnd } : {}),
+    id: raw.id, weekStart: weekStartISO(fromISO(raw.weekStart)), startedOn: raw.startedOn ?? raw.weekStart, ...(raw.weekEnd && weekStartISO(fromISO(raw.weekStart)) === raw.weekStart ? { weekEnd: raw.weekEnd } : {}),
     createdAt: raw.createdAt ?? (Date.parse(raw.archivedAt ?? '') || fromISO(raw.weekStart).getTime()), updatedAt: raw.updatedAt ?? 0,
     rev, baseRev: raw.baseRev ?? '', doc: raw.doc,
   };

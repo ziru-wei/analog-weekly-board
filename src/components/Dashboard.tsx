@@ -140,11 +140,11 @@ export function Dashboard({ state, onOpen, onAdd, onDelete, onResolve, onClose }
   const weeks = new Map<string, Board[]>([[state.week, []]]);
   for (const board of state.boards) weeks.set(board.weekStart, [...(weeks.get(board.weekStart) ?? []), board]);
   const weekStarts = [...weeks.keys()];
-  // Each week shows the days it was actually in use: from its first board's start to the day before the next week.
+  // Monday groups share a Sunday end; the current week always shows the full calendar span.
   const months = new Map<string, { week: string; boards: Board[]; startedOn: string; label: string; upcoming?: number }[]>();
   for (const week of weekStarts.sort().reverse()) {
     const boards = [...weeks.get(week)!].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
-    const startedOn = boards.reduce((first, b) => b.startedOn < first ? b.startedOn : first, boards[0]?.startedOn ?? week);
+    const startedOn = week === state.week ? week : boards.reduce((first, b) => b.startedOn < first ? b.startedOn : first, boards[0]?.startedOn ?? week);
     const end = boards.find(b => b.weekEnd)?.weekEnd ?? weekEndOf(week, weekStarts);
     const month = weekMonth(startedOn > week ? startedOn : week, end);
     months.set(month, [...(months.get(month) ?? []), { week, boards, startedOn, label: weekLabel(week, startedOn, end) }]);

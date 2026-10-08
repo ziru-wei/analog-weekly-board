@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Migrate legacy weekday board keys into Monday weeks without losing content; prevent reversed dashboard dates and preserve silver-pin carry-over.
+
 - Prepare refreshed Chrome, Firefox and AMO review packages.
 - Fix weeks to Monday–Sunday and remove the calendar preference, ignoring legacy local and cloud settings.
 - Fill the next-week curtain board background and widen the theatre curtain to cover its full width.
