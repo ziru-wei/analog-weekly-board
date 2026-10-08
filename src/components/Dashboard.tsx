@@ -69,7 +69,6 @@ function Curtain() {
     </defs>
     <rect x="9" width="222" height="150" fill="#875f3d" />
     <g filter={wobble} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20H228V138H12Z" fill="#311923" />
       {[false, true].map(right => <g key={String(right)} className={right ? 'curtain-right' : 'curtain-left'}>
         <g transform={right ? 'translate(240 0) scale(-1 1)' : undefined}>
           <path d={panel} fill="#922c3f" transform="translate(.45 .35)" />

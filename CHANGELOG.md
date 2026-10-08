@@ -2,6 +2,8 @@
 
 ## 0.1.3.1
 
+- Suppress double-click actions after real drags, keep sticky drops released beyond the board edge, and preserve moved cards when capture or window focus is interrupted. Remove the dark stage rectangle behind the curtain fabric.
+
 - Finalize all drag gestures at pointer-release coordinates and capture on the stable workspace. Prevent fast supply drops, card moves, resizes, rope connections and tape gestures from disappearing or missing their final position; preserve double-click editing and deletion.
 
 - Prevent pointer-captured double clicks on board objects from opening Dashboard; require a click starting outside the board and remaining outside.

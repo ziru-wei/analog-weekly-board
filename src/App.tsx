@@ -150,6 +150,7 @@ export default function App() {
   const pointer = useRef({ x: 0, y: 0 });
   const doubleClickStartedOnPin = useRef(false);
   const doubleClickStartedOutside = useRef(false);
+  const lastPointerWasDrag = useRef(false);
   const doubleClickItemId = useRef<string | null>(null);
   const doubleClickStartedOnBlank = useRef(false);
   const doubleClickPinId = useRef<string | null>(null);
@@ -201,6 +202,12 @@ export default function App() {
     sound.play(cue);
   };
   const finishEdit = () => { if (editing) commands.finishTransaction(); setEditing(null); };
+  const keepInterruptedDrag = () => {
+    const g = gesture.current;
+    if (g?.moved && (g.kind === 'drag' || g.kind === 'resize' || (g.kind === 'supply' && g.item))) {
+      lastPointerWasDrag.current = true; commands.finishTransaction(true); clearGesture(); setPalette(null);
+    } else cancelGesture();
+  };
   const cancelGesture = () => { const g = gesture.current; if (g?.kind === 'pan') setPan(g.pan); commands.cancelTransaction(); clearGesture(); setPalette(null); };
   const maybeStopLaterCarry = (removed: PinModel[]) => {
     const live = liveState(), next = removeLaterSilverPins(live, live.activeId, removed);
@@ -355,6 +362,7 @@ export default function App() {
     // A fast release can arrive before a move event; apply its final position first.
     if (captureTarget.current && event.pointerId !== captureTarget.current.pointerId) return;
     pointerMove(event);
+    lastPointerWasDrag.current = g.moved;
     if (g.kind === 'pin-supply') {
       const p = point(event);
       if (g.moved && p.x >= 0 && p.y >= 0 && p.x <= 1600 && p.y <= 1000) {
@@ -372,8 +380,7 @@ export default function App() {
       commands.finishTransaction(g.moved); clearGesture(); return;
     }
     if (g.kind === 'supply') {
-      const p = point(event);
-      if (!g.item || p.x < 0 || p.x > 1600 || p.y < 0 || p.y > 1000) { commands.cancelTransaction(); setSelection(null); clearGesture(); return; }
+      if (!g.item) { commands.cancelTransaction(); setSelection(null); clearGesture(); return; }
       const colors = PAPER_COLORS.filter(color => color !== g.color);
       setStackColor(colors[Math.floor(Math.random() * colors.length)]);
     }
@@ -503,7 +510,7 @@ export default function App() {
       const g = gesture.current;
       if (event.code === 'Space' && g?.kind === 'pin' && g.mode === 'connect' && g.moved) { onKey(event); event.stopPropagation(); }
     };
-    const onBlur = () => { if (gesture.current) cancelGesture(); };
+    const onBlur = () => { if (gesture.current) keepInterruptedDrag(); };
     window.addEventListener('keydown', onGestureKey, true);
     window.addEventListener('copy', onCopy); window.addEventListener('paste', onPaste); window.addEventListener('keydown', onKey); window.addEventListener('blur', onBlur);
     return () => { window.removeEventListener('keydown', onGestureKey, true); window.removeEventListener('copy', onCopy); window.removeEventListener('paste', onPaste); window.removeEventListener('keydown', onKey); window.removeEventListener('blur', onBlur); };
@@ -589,6 +596,7 @@ export default function App() {
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
     <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && doubleClickStartedOutside.current && !tapeHeld) { const rect = board.current?.getBoundingClientRect(); if (rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) return; finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
       onPointerDownCapture={event => {
+        lastPointerWasDrag.current = false;
         const rect = board.current?.getBoundingClientRect();
         const onBoard = rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
         doubleClickStartedOutside.current = event.target === event.currentTarget && !onBoard;
@@ -610,6 +618,7 @@ export default function App() {
         if (view.zoom > 1 && !tapeHeld) { gesture.current = { kind: 'pan', start: { x: event.clientX, y: event.clientY }, pan, moved: false }; capture(event); }
       }}
       onDoubleClickCapture={event => {
+        if (lastPointerWasDrag.current) { event.preventDefault(); event.stopPropagation(); return; }
         if (tapeHeld || doubleClickStartedOnPin.current || (event.target as Element).closest('.pin')) {
           event.preventDefault(); event.stopPropagation();
           const id = doubleClickPinId.current, pin = id ? store.getSnapshot().pins[id] : undefined;
@@ -626,7 +635,7 @@ export default function App() {
         }
       }}
       onDragOver={event => event.preventDefault()} onDrop={event => event.preventDefault()}
-      onPointerMove={event => { if (tapeHeld) setTapeCursor({ x: event.clientX, y: event.clientY }); pointerMove(event); }} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onLostPointerCapture={event => { const captured = captureTarget.current; if (gesture.current && captured?.element === event.target && captured.pointerId === event.pointerId) cancelGesture(); }}>
+      onPointerMove={event => { if (tapeHeld) setTapeCursor({ x: event.clientX, y: event.clientY }); pointerMove(event); }} onPointerUp={pointerUp} onPointerCancel={event => { if (captureTarget.current?.pointerId === event.pointerId) keepInterruptedDrag(); }} onLostPointerCapture={event => { const captured = captureTarget.current; if (gesture.current && captured?.element === event.target && captured.pointerId === event.pointerId) keepInterruptedDrag(); }}>
       <div className="board-size" style={{ top: center.y, transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})` }}>
         <div ref={board} className={`board ${activeGesture ? 'interacting' : ''} ${temporary ? 'connecting' : ''}`}
           onPointerDown={event => {
