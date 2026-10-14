@@ -1,6 +1,5 @@
 import { youtubeVideo, videoCardSize } from './youtube';
 import { bilibiliVideo } from './bilibili';
-import type { BoardItem } from './model';
 
 export interface SocialPost { provider: 'instagram' | 'x' | 'xiaohongshu'; label: string; id: string; src: string }
 export function socialPost(value: string): SocialPost | null {
@@ -45,15 +44,4 @@ export function isCompactWebsiteCard(width: number, height: number) {
 
 export function isHorizontalWebsiteCard(width: number, height: number) {
   return width >= 230 && (height < 150 || width / height >= 2.4);
-}
-
-export function toggleWebsiteCard(item: BoardItem) {
-  if (item.data.type !== 'website') return null;
-  const data = item.data;
-  if (isCompactWebsiteCard(item.width, item.height)) {
-    const size = data.expandedSize ?? websiteCardSize(data.url);
-    const { expandedSize: _saved, ...rest } = data;
-    return { ...size, data: { ...rest, compact: false } };
-  }
-  return { width: 320, height: 96, data: { ...data, compact: true, expandedSize: { width: item.width, height: item.height } } };
 }

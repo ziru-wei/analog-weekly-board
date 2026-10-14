@@ -1,10 +1,13 @@
 import { removeLaterSilverPins } from './carryForward';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { BOARD_CLIPBOARD_TYPE, encodeBoardGroup, readBoardGroup } from './boardClipboard';
-import { measureLabel, toggleLabel } from './labelLayout';
+import { measureLabel } from './labelLayout';
+import { copyableText } from './copyText';
+import { NEW_CARD_PAPER, cardStock } from './cardStock';
+import { pressItems } from './pressFeedback';
 import { youtubeVideo } from './youtube';
 import { bilibiliVideo } from './bilibili';
-import { socialPost, websiteCardSize, toggleWebsiteCard } from './socialEmbed';
+import { socialPost, websiteCardSize } from './socialEmbed';
 import { websitePaste } from './websitePaste';
 import { useCanvasReady } from './useCanvasReady';
 import { useBoardView } from './useBoardView';
@@ -13,7 +16,7 @@ import { boardCenter, wheelPixels } from './boardView';
 import { SyncStatus } from './components/SyncStatus';
 import { Dashboard } from './components/Dashboard';
 import { ImageLightbox } from './components/ImageLightbox';
-import { type WeekState, DASHBOARD_OPEN_KEY, acknowledgeUpload, activeBoard, addBoard, deleteBoard, newRev, openBoard, resolveBoardConflict, rollover, saveWeekState } from './weeks';
+import { type WeekState, weekEndOf, DASHBOARD_OPEN_KEY, acknowledgeUpload, activeBoard, addBoard, deleteBoard, newRev, openBoard, resolveBoardConflict, rollover, saveWeekState } from './weeks';
 import { writeBoard, writeKv } from './storage';
 import { onRetire, useRetired } from './singleTab';
 import { cloud, useCloud } from './cloud/sync';
@@ -31,6 +34,8 @@ import { Tape } from './components/Tape';
 import { TapeRoll, TAPE_WIDTH } from './components/TapeRoll';
 import { AccessoryTray } from './components/AccessoryTray';
 import { Ropes } from './components/Ropes';
+import { LetterpressFilters } from './components/Letterpress';
+import { BoardLabel } from './components/BoardLabel';
 
 // Blob URLs die with the tab, so pasted photos are stored as downscaled JPEG data URLs that survive reloads and archiving.
 function persistentImage(img: HTMLImageElement) {
@@ -53,7 +58,7 @@ type Gesture =
   | { kind: 'pin-supply'; start: Point; color: string; pinKind?: PinModel['kind']; moved: boolean }
   | { kind: 'supply'; start: Point; color: string; item?: BoardItem; moved: boolean }
   | { kind: 'pan'; start: Point; pan: Point; moved: boolean };
-type Palette = { type: 'pin' | 'paper'; id: string } | null;
+type Palette = { type: 'pin' | 'paper' | 'card'; id: string } | null;
 export default function App() {
   const document = useDocument(store);
   const { sound, enabled: soundEnabled, toggle: toggleSound } = useBoardSound();
@@ -461,7 +466,7 @@ export default function App() {
         event.preventDefault(); finishEdit(); const p = pasteCenter(), domain = url.hostname.replace(/^www\./, '');
         const video = youtubeVideo(url.href);
         const { width, height } = websiteCardSize(url.href);
-        const id = commands.createItem({ type: 'website', url: url.href, domain, title: pasted.title || (video ? 'YouTube video' : bilibiliVideo(url.href) ? 'Bilibili video' : socialPost(url.href)?.label ?? domain), description: '' }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
+        const id = commands.createItem({ type: 'website', url: url.href, domain, title: pasted.title || (video ? 'YouTube video' : bilibiliVideo(url.href) ? 'Bilibili video' : socialPost(url.href)?.label ?? domain), description: '', paper: NEW_CARD_PAPER }, { x: p.x - width / 2, y: p.y - height / 2 }, { width, height }); setSelection({ type: 'item', id });
         sound.play('paper');
       } catch { /* Plain text stays in the clipboard until a note is being edited. */ }
     };
@@ -490,15 +495,28 @@ export default function App() {
         setSelection(ids.length || pinIds.length ? { type: 'item', id: ids[0] ?? '', ids, pinIds } : null);
         return;
       }
-      const selected = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
-      if (selected?.data.type === 'sticky' && selected.data.variant && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+      // With nothing selected, Enter picks up the blue tape, and puts it back down.
+      if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !selection && !editing && !gesture.current && !palette && !cropping) {
         event.preventDefault();
-        if (!event.repeat) { const patch = toggleLabel(selected); if (patch) { commands.updateItem(selected.id, patch); if (patch.data?.type === 'sticky' && patch.data.variant === 'label') sound.play('label'); } }
+        if (!event.repeat) {
+          const roll = window.document.querySelector('.blue-tape-roll')?.getBoundingClientRect();
+          if (!tapeHeld && roll) setTapeCursor({ x: roll.left + roll.width / 2, y: roll.top + roll.height / 2 });
+          setTapeHeld(held => !held);
+        }
         return;
       }
-      if (selected?.data.type === 'website' && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+      const selected = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
+      // Enter copies what notes say and where website cards link to, for every selected one.
+      const selectedItems = selection?.type === 'item' ? (selection.ids ?? [selection.id]).map(id => document.items[id]).filter(Boolean) : [];
+      const copyable = copyableText(selectedItems);
+      if (copyable !== null && !editing && !gesture.current && event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
-        if (!event.repeat) { const patch = toggleWebsiteCard(selected); if (patch) commands.updateItem(selected.id, patch); }
+        if (!event.repeat) {
+          const count = selectedItems.filter(item => item.data.type === 'sticky' || item.data.type === 'website').length;
+          if (!copyable) setNotice(count === 1 ? 'This note is empty.' : 'These notes are empty.');
+          else void navigator.clipboard.writeText(copyable).then(() => pressItems(selectedItems.filter(item => item.data.type === 'sticky' || item.data.type === 'website')
+            .map(item => board.current?.querySelector<HTMLElement>(`[data-item-id="${item.id}"]`)).filter((element): element is HTMLElement => !!element)), () => setNotice('Could not copy. Try again.'));
+        }
         return;
       }
       if (selected?.data.type === 'image' && !editing && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -570,7 +588,7 @@ export default function App() {
     };
   }, [onPan, onZoom, startPinch, changePinch, endPinch]);
   const palettePin = palette?.type === 'pin' ? document.pins[palette.id] : null;
-  const paletteItem = palette?.type === 'paper' ? document.items[palette.id] : null;
+  const paletteItem = palette?.type === 'paper' || palette?.type === 'card' ? document.items[palette.id] : null;
   const palettePoint = palettePin ? pinPosition(palettePin, palettePin.itemId ? document.items[palettePin.itemId] : undefined) : paletteItem ? { x: paletteItem.x + paletteItem.width / 2, y: paletteItem.y + paletteItem.height } : null;
   const isBlank = (target: EventTarget) => target instanceof Element && (target.classList.contains('board') || target.classList.contains('cork-texture'));
   const tapeGeometry = tapePreview ? {
@@ -593,10 +611,11 @@ export default function App() {
               const next = { ...data, title: automatic && preview.title ? preview.title : data.title, description: preview.media ? preview.description : data.description || preview.description, image: preview.media ? preview.image : data.image || preview.image, media: preview.media ?? data.media };
               if (next.title !== data.title || next.description !== data.description || next.image !== data.image || JSON.stringify(next.media) !== JSON.stringify(data.media)) commands.updateItem(item.id, { data: next });
             }}
-            onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); setPalette(target.data.type === 'sticky' && !target.data.variant ? { type: 'paper', id: target.id } : null); }}
+            onContextMenu={(event, target) => { event.preventDefault(); finishEdit(); setPalette(target.data.type === 'sticky' && !target.data.variant ? { type: 'paper', id: target.id } : target.data.type === 'website' ? { type: 'card', id: target.id } : null); }}
             onText={text => { if (item.data.type === 'sticky') { const data = { ...item.data, text }; commands.updateItem(item.id, { data, ...(data.variant ? measureLabel(data, document.board) : {}) }); } else if (item.data.type === 'image') commands.updateItem(item.id, { data: { ...item.data, caption: text } }); else if (item.data.type === 'website') commands.updateItem(item.id, { data: { ...item.data, title: text } }); }} />;
   const hintItem = selection?.type === 'item' && !selection.pinIds && (selection.ids?.length ?? 1) === 1 ? document.items[selection.id] : undefined;
   return <div className={`app-shell ${tapeHeld ? 'tape-equipped' : ''} ${canvasReady ? '' : 'canvas-loading'}`} aria-busy={!canvasReady}>
+    <LetterpressFilters />
     {!canvasReady && <div className="canvas-loader" role="status" aria-label="Loading board"><span className="loading-spinner" /></div>}
     <main className="workspace" ref={viewport} onDoubleClick={event => { if (event.target === event.currentTarget && doubleClickStartedOutside.current && !tapeHeld) { const rect = board.current?.getBoundingClientRect(); if (rect && event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) return; finishEdit(); setSelection(null); setPalette(null); setDashboard(true); } }} aria-label="Corkboard. Double-click cork to add a note. Paste images or URLs. Pinch or Ctrl/Cmd-scroll to zoom; scroll or drag empty space to pan."
       onPointerDownCapture={event => {
@@ -661,6 +680,7 @@ export default function App() {
             event.preventDefault(); event.stopPropagation(); finishEdit(); setPalette(null); commands.beginTransaction();
             gesture.current = { kind: 'pin-supply', start: point(event), color, pinKind, moved: false }; capture(event);
           }} />
+          {(() => { const w = weeksRef.current, open = activeBoard(w); return <BoardLabel weekStart={open.weekStart} weekEnd={open.weekEnd ?? weekEndOf(open.weekStart, w.boards.map(b => b.weekStart))} />; })()}
           <div className="items-layer">{Object.values(document.items).filter(item => !(item.data.type === 'sticky' && item.data.variant === 'vellum')).map(renderItem)}</div>
           <div className="vellum-layer">{Object.values(document.items).filter(item => item.data.type === 'sticky' && item.data.variant === 'vellum').map(renderItem)}</div>
           <AccessoryTray held={tapeHeld} onPickUp={event => {
@@ -707,15 +727,16 @@ export default function App() {
     {!dashboard && !lightbox && !palette && <p className="board-hint" style={{ top: Math.min(size.height - 22, center.y + pan.y + 500 * scale + 7), maxWidth: Math.max(200, Math.min(560, 950 * scale)) }}>
       {cropping ? <><b>drag</b> crop · <b>enter</b> apply · <b>esc</b> cancel · <b>r</b> reset</>
         : editing ? <><b>esc</b> finish editing</>
-        : tapeHeld ? <><b>drag</b> place tape · <b>esc</b> put away</>
+        : tapeHeld ? <><b>drag</b> place tape · <b>enter</b> / <b>esc</b> put away</>
         : temporary ? <><b>space</b> connect pin · <b>esc</b> cancel</>
         : selection?.type === 'pin' && document.pins[selection.id]?.kind === 'silver' ? <>{document.pins[selection.id].itemId ? 'Keeps this item on future weeks' : 'Pin onto an item to keep it on future weeks'} · <b>hold</b> move pin · <b>delete</b> remove</>
         : hintItem?.data.type === 'image' ? <><b>enter</b> frame · <b>space</b> enlarge · <b>double-click</b> crop</>
-        : hintItem?.data.type === 'website' ? <><b>enter</b> compact / expand · <b>double-click title</b> edit · <b>esc</b> deactivate</>
-        : hintItem?.data.type === 'sticky' && hintItem.data.variant ? <><b>enter</b> change label · <b>double-click</b> edit</>
-        : selection?.type === 'item' && selection.pinIds ? <><b>⌘C</b> copy · <b>⌘V</b> paste on another board · <b>delete</b> remove · <b>esc</b> deselect</>
+        : hintItem?.data.type === 'website' ? <><b>enter</b> copy link · <b>double-click title</b> edit · <b>esc</b> deactivate</>
+        : hintItem?.data.type === 'sticky' ? <><b>enter</b> copy text · <b>double-click</b> edit · <b>delete</b> remove</>
+        : selection?.type === 'item' && selection.pinIds ? <><b>enter</b> copy text &amp; links · <b>⌘C</b> copy items · <b>⌘V</b> paste on another board · <b>delete</b> remove</>
+        : selection?.type === 'item' && (selection.ids?.length ?? 1) > 1 ? <><b>enter</b> copy text &amp; links · <b>⌘C</b> copy items · <b>delete</b> remove · <b>esc</b> deselect</>
         : selection ? <><b>delete</b> remove · <b>esc</b> deselect</>
-        : <><b>pinch</b> zoom · <b>scroll</b> pan · <b>double-click outside</b> dashboard</>}
+        : <><b>enter</b> pick up tape · <b>pinch</b> zoom · <b>scroll</b> pan · <b>double-click outside</b> dashboard</>}
     </p>}
 
     {dashboard && <Dashboard state={liveState()} onResolve={resolveConflict} onClose={() => setDashboard(false)}
@@ -731,9 +752,9 @@ export default function App() {
       </button>
       <span className={`sync-${cloudState.status}`}><i /><SyncStatus state={cloudState} /></span>
     </div>
-    {palettePoint && palettePos && <ColorPalette kind={palettePin ? 'pin' : 'paper'} value={palettePin?.color ?? (paletteItem?.data.type === 'sticky' ? paletteItem.data.color : '')}
+    {palettePoint && palettePos && <ColorPalette kind={palettePin ? 'pin' : paletteItem?.data.type === 'website' ? 'card' : 'paper'} value={palettePin?.color ?? (paletteItem?.data.type === 'sticky' ? paletteItem.data.color : paletteItem?.data.type === 'website' ? cardStock(paletteItem.data.paper).paper : '')}
       x={clamp(palettePos.x, 116, size.width - 116)} y={clamp(palettePos.y + 16, 14, size.height - 64)}
-      onChange={color => { if (palettePin) commands.updatePin(palettePin.id, { color }); else if (paletteItem?.data.type === 'sticky') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, color } }); setPalette(null); }} />}
+      onChange={color => { if (palettePin) commands.updatePin(palettePin.id, { color }); else if (paletteItem?.data.type === 'sticky') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, color } }); else if (paletteItem?.data.type === 'website') commands.updateItem(paletteItem.id, { data: { ...paletteItem.data, paper: color } }); setPalette(null); }} />}
     {notice && <div className="toast" role="status">{notice}</div>}
     {retired && <div className="retired-overlay" role="alert">Weekly Board is open in another tab.</div>}
   </div>;

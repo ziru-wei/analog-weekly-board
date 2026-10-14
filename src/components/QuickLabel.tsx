@@ -34,7 +34,8 @@ export function QuickLabel({ enabled, boardBottom, onAppear, onCommit }: { enabl
       onKeyDown={event => {
         if (event.nativeEvent.isComposing) return;
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); update(''); }
-        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); commit(); }
+        // An empty composer leaves Enter to the board (it picks up the tape).
+        if (event.key === 'Enter' && !event.shiftKey && value.current) { event.preventDefault(); event.stopPropagation(); commit(); }
       }} rows={1} style={{ width: paperSize.width, height: paperSize.height }} />
   </div>;
 }

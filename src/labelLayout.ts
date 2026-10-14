@@ -1,4 +1,4 @@
-import { type BoardItem, type ItemData, clamp } from './model';
+import { type ItemData, clamp } from './model';
 
 export function labelFontSize(data: Extract<ItemData, { type: 'sticky' }>) {
   const size = data.fontSize ?? (data.variant === 'vellum' ? 16 : 14);
@@ -24,13 +24,4 @@ export function measureLabel(data: Extract<ItemData, { type: 'sticky' }>, bounds
     const height = Math.min(bounds.height, Math.max(vellum ? 36 * fontScale : 28 * fontScale, Math.ceil(text.getBoundingClientRect().height) + 2));
     return { width, height };
   } finally { paper.remove(); }
-}
-
-export function toggleLabel(item: BoardItem): Partial<BoardItem> | null {
-  if (item.data.type !== 'sticky' || !item.data.variant) return null;
-  const variant: 'label' | 'vellum' = item.data.variant === 'vellum' ? 'label' : 'vellum';
-  const { labelWidth: _manual, ...rest } = item.data;
-  const data = { ...rest, variant, fontSize: variant === 'vellum' ? 16 : 14, color: variant === 'vellum' ? '#ffffff88' : '#202120' };
-  const size = measureLabel(data);
-  return { ...size, x: item.x + (item.width - size.width) / 2, data };
 }

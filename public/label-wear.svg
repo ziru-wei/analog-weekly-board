@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">
+  <!-- Paper-coloured flecks where a printed black border has rubbed away. -->
+  <filter id="w" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency=".8 .55" numOctaves="2" seed="7" stitchTiles="stitch"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 .953  0 0 0 0 .945  0 0 0 0 .918  2.4 0 0 0 -.7"/>
+    <feComponentTransfer><feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 0 0 0 0 0 .8 1"/></feComponentTransfer>
+  </filter>
+  <rect width="140" height="140" filter="url(#w)"/>
+</svg>

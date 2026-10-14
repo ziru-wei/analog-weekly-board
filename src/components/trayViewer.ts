@@ -345,6 +345,7 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
   const shadowTex = makeShadowTexture();
   const pigment = makePigmentTexture();
   const paints: PhysicalMaterial[] = [];
+  const pads: { paint: Mesh; shadow: Mesh }[] = [];
   for (let i = 0; i < 6; i++) {
     const x = (i - 2.5) * PAINT_GAP;
     const mat = new PhysicalMaterial({
@@ -368,13 +369,21 @@ export function createTrayViewer(canvas: HTMLCanvasElement) {
     const paint = new Mesh(paintGeometry, mat);
     paint.position.set(x, 0, THICKNESS / 2 - 0.1);
     add(paint);
+    pads.push({ paint, shadow });
   }
 
   const light = new PointLight(0xffffff, 2.2, 0, 1.4);
   light.position.set(0, 0, 40);
   add(light);
 
+  // Fewer than six colours: only that many pads, centred under their swatches.
   const setColors = (colors: string[]) => {
+    const count = Math.min(colors.length, paints.length);
+    pads.forEach(({ paint, shadow }, i) => {
+      const x = (i - (count - 1) / 2) * PAINT_GAP;
+      paint.visible = shadow.visible = i < count;
+      paint.position.x = x; shadow.position.x = x + 0.5;
+    });
     paints.forEach((m, i) => { if (colors[i]) { m.color.set(colors[i]); m.emissive.set(colors[i]); m.emissiveIntensity = .3; } m.setDirty?.(); });
     scene.setDirty();
   };

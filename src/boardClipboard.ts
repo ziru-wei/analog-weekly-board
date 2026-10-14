@@ -23,6 +23,7 @@ export function readBoardClipboard(text: string): { item: BoardItem; pins: Pin[]
         if (data.media.video && (!web(data.media.video.url) || !Number.isFinite(data.media.video.width) || data.media.video.width <= 0 || !Number.isFinite(data.media.video.height) || data.media.video.height <= 0)) return null;
       }
       if (data.expandedSize && (!Number.isFinite(data.expandedSize.width) || !Number.isFinite(data.expandedSize.height))) return null;
+      if (data.paper !== undefined && typeof data.paper !== 'string') return null;
     } else if (data.type === 'image') {
       if (!strings('src', 'alt') || !Number.isFinite(data.aspectRatio) || data.aspectRatio <= 0 || !['white', 'black', 'worn'].includes(data.frame) || (data.caption !== undefined && typeof data.caption !== 'string')) return null;
       if (data.crop && !['x', 'y', 'w', 'h'].every(key => Number.isFinite(data.crop[key]))) return null;

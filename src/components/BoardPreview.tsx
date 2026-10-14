@@ -1,6 +1,7 @@
 import { youtubeVideo } from '../youtube';
 import { bilibiliVideo } from '../bilibili';
 import { socialPost } from '../socialEmbed';
+import { cardStock } from '../cardStock';
 import { memo, useRef, type CSSProperties } from 'react';
 import { type BoardDocument, type BoardItem, clamp, pinPosition } from '../model';
 import { ropePath } from './Ropes';
@@ -37,16 +38,16 @@ function PreviewItem({ item }: { item: BoardItem }) {
   }
   const video = youtubeVideo(data.url);
   const image = data.image || data.media?.images[0] || (video ? `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg` : undefined);
-  const horizontal = w > h * 1.5;
+  const horizontal = w > h * 1.5, stock = cardStock(data.paper);
   return <g transform={transform} style={{ filter: shadow }}>
-    <rect x={x} y={y} width={w} height={h} fill="#f7f6f1" />
+    <rect x={x} y={y} width={w} height={h} fill={stock.paper} />
     <foreignObject x={x} y={y} width={w} height={h}>
-      <div style={{ display: 'flex', flexDirection: horizontal ? 'row' : 'column', boxSizing: 'border-box', padding: 10, gap: 8, height: '100%', overflow: 'hidden', color: '#2b2a27' }}>
+      <div style={{ display: 'flex', flexDirection: horizontal ? 'row' : 'column', boxSizing: 'border-box', padding: 10, gap: 8, height: '100%', overflow: 'hidden', color: stock.ink }}>
         {image && <img src={image} alt="" draggable={false} referrerPolicy="no-referrer" style={{ display: 'block', objectFit: 'contain', background: '#ece9e1', minHeight: 0, minWidth: 0, width: horizontal ? '52%' : '100%', flex: horizontal ? '0 0 52%' : '1 1 0' }} />}
-        <div style={{ flex: horizontal ? '1 1 0' : '0 0 auto', minWidth: 0, overflow: 'hidden', overflowWrap: 'anywhere', font: "550 17px/1.25 Inter, ui-sans-serif, system-ui, sans-serif" }}>
-          <div style={{ font: "11px/1.2 monospace", color: '#8a867b', marginBottom: 5 }}>{data.domain}</div>
+        <div style={{ flex: horizontal ? '1 1 0' : '0 0 auto', minWidth: 0, overflow: 'hidden', overflowWrap: 'anywhere', font: "300 17px/1.25 'Helvetica Neue', Helvetica, Arial, sans-serif" }}>
+          <div style={{ font: "11px/1.2 'Helvetica Neue', Helvetica, Arial, sans-serif", opacity: .7, marginBottom: 5 }}>{data.domain}</div>
           <div>{data.title}</div>
-          {data.description && <div style={{ font: '12px/1.4 system-ui, sans-serif', color: '#777369', marginTop: 6 }}>{data.description}</div>}
+          {data.description && <div style={{ font: "italic 12px/1.4 'Iowan Old Style', Palatino, Georgia, serif", opacity: .75, marginTop: 6 }}>{data.description}</div>}
         </div>
       </div>
     </foreignObject>
@@ -61,7 +62,7 @@ function SimpleItem({ item }: { item: BoardItem }) {
   const text = data.type === 'sticky' ? data.text : data.type === 'website' ? data.title : '';
   const rows = text.trim() ? Math.min(4, Math.max(1, Math.ceil(text.length / 24)), Math.max(1, Math.floor((height - 20) / 20))) : 0;
   return <g transform={`rotate(${item.rotation} ${x + width / 2} ${y + height / 2})`}>
-    <rect x={x} y={y} width={width} height={height} fill={data.type === 'tape' ? '#3f83b7' : data.type === 'sticky' ? data.variant === 'vellum' ? '#ffffff88' : data.color : data.type === 'image' ? '#b0aaa0' : '#f7f6f1'} />
+    <rect x={x} y={y} width={width} height={height} fill={data.type === 'tape' ? '#3f83b7' : data.type === 'sticky' ? data.variant === 'vellum' ? '#ffffff88' : data.color : data.type === 'image' ? '#b0aaa0' : cardStock(data.paper).paper} />
     {data.type === 'image' && <image href={data.src} x={x + 6} y={y + 6} width={Math.max(1, width - 12)} height={Math.max(1, height - 12)} preserveAspectRatio="xMidYMid slice" />}
     {(video || post) && <g aria-label={video ? bilibili ? 'Bilibili video' : 'YouTube video' : `${post && post.label} post`}>
       <rect x={x + 12} y={y + 38} width={width - 24} height={height - 50} rx={3} fill={video ? '#262626' : post && post.provider === 'instagram' ? '#bc5487' : post && post.provider === 'xiaohongshu' ? '#ec4d61' : '#30343a'} />

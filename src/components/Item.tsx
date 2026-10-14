@@ -6,6 +6,9 @@ import type { LinkPreview } from '../linkPreview';
 import { PhotoImage } from './PhotoImage';
 import { CropLayer, type CropPatch } from './CropLayer';
 import { type BoardItem, clamp, variation } from '../model';
+// Chinese in a caption is drawn heavier than the Latin marker lettering around it.
+const CJK = /([\u2e80-\u303f\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]+)/;
+const captionRuns = (text = '') => text.split(CJK).map((part, i) => i % 2 ? <span key={i} className="cjk">{part}</span> : part);
 export function Item({ item, selected, webInteractive, editing, pinTarget, onPointerDown, onResize, onEdit, onText, onFinishEdit, onContextMenu, onAddPin, onCrop, cropping, boardScale, onCropApply, onCropCancel, onWebsiteMinHeight, onWebsitePreview }: {
   cropping: boolean; boardScale: number; onCropApply: (patch: CropPatch) => void; onCropCancel: () => void;
   item: BoardItem; selected: boolean; webInteractive: boolean; editing: boolean; pinTarget?: boolean;
@@ -28,7 +31,7 @@ export function Item({ item, selected, webInteractive, editing, pinTarget, onPoi
     {data.type === 'sticky' && (editing ? <textarea ref={textarea} className="note-text" value={data.text} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} onPointerDown={event => event.stopPropagation()} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onFinishEdit(); } event.stopPropagation(); }} aria-label="Note text" spellCheck={false} /> : <div ref={note} className="note-text">{data.text}</div>)}
     {data.type === 'image' && <><div className="photo-surface"><PhotoImage data={data} /><div className="photo-reflection" /></div>
       {data.frame === 'white' && <div className="photo-caption" onPointerDown={event => event.stopPropagation()} onDoubleClick={event => { event.stopPropagation(); onEdit(); }}>
-        {editing ? <input ref={captionInput} value={data.caption ?? ''} maxLength={80} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} aria-label="Photo caption" onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === 'Escape') onFinishEdit(); }} /> : <span>{data.caption}</span>}
+        {editing ? <><span className="caption-mirror" aria-hidden="true">{captionRuns(data.caption)}</span><input ref={captionInput} value={data.caption ?? ''} maxLength={80} onChange={event => onText(event.target.value)} onBlur={onFinishEdit} aria-label="Photo caption" onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter' || event.key === 'Escape') onFinishEdit(); }} /></> : <span>{captionRuns(data.caption)}</span>}
       </div>}</>}
     {data.type === 'image' && cropping && <CropLayer item={item} boardScale={boardScale} onApply={onCropApply} onCancel={onCropCancel} />}
     {data.type === 'website' && <WebsiteCard data={data} width={item.width} height={item.height} interactive={webInteractive} editing={editing} onEdit={onEdit} onText={onText} onFinishEdit={onFinishEdit} onMinHeight={onWebsiteMinHeight} onPreview={onWebsitePreview} />}

@@ -52,6 +52,19 @@ export function weekMonth(from: string, end: string) {
   return addDays(from, Math.floor(days / 2)).slice(0, 7);
 }
 
+/** ISO-8601 week number of the week holding `iso`'s midweek day, so it reads naturally for any starting weekday. */
+export function weekNumber(weekStart: string) {
+  const mid = fromISO(addDays(weekStart, 3));
+  const monday = new Date(mid.getFullYear(), mid.getMonth(), mid.getDate() - (mid.getDay() + 6) % 7);
+  const year = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 3).getFullYear(); // the year of its Thursday
+  const jan4 = new Date(year, 0, 4), firstMonday = new Date(year, 0, 4 - (jan4.getDay() + 6) % 7);
+  return { year, week: 1 + Math.round((monday.getTime() - firstMonday.getTime()) / (7 * 86_400_000)) };
+}
+/** Meteorological season (northern hemisphere) of a week's midweek day. */
+export function seasonOf(weekStart: string) {
+  const month = fromISO(addDays(weekStart, 3)).getMonth();
+  return ['Winter', 'Winter', 'Spring', 'Spring', 'Spring', 'Summer', 'Summer', 'Summer', 'Autumn', 'Autumn', 'Autumn', 'Winter'][month];
+}
 const fmt = (iso: string, withYear: boolean) => fromISO(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
 export function weekLabel(weekStart: string, _startedOn = weekStart, end = weekEndISO(weekStart)) {
   const from = weekStartISO(fromISO(weekStart));

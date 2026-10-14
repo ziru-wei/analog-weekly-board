@@ -2,7 +2,7 @@ export type ItemData =
   | { type: 'tape' }
   | { type: 'sticky'; text: string; color: string; fontSize?: number; variant?: 'label' | 'vellum'; labelWidth?: number }
   | { type: 'image'; src: string; alt: string; aspectRatio: number; frame: 'white' | 'black' | 'worn'; caption?: string; sourceAspect?: number; crop?: { x: number; y: number; w: number; h: number } }
-  | { type: 'website'; url: string; title: string; domain: string; description: string; image?: string; media?: { images: string[]; video?: { url: string; width: number; height: number } }; compact?: boolean; expandedSize?: { width: number; height: number } };
+  | { type: 'website'; url: string; title: string; domain: string; description: string; image?: string; media?: { images: string[]; video?: { url: string; width: number; height: number } }; compact?: boolean; expandedSize?: { width: number; height: number }; paper?: string };
 export interface BoardItem {
   id: string; type: ItemData['type']; x: number; y: number; width: number; height: number;
   rotation: number; zIndex: number; data: ItemData; pins: string[];

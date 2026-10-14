@@ -1,5 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
 import type { createTrayViewer as CreateTrayViewer } from './trayViewer';
+import { CARD_COLORS } from '../cardStock';
 
 // Visual approximations of Post-it bright collections (Power/Tropical Pink, Acid Lime).
 export const PAPER_COLORS = ['#fff17a', '#e5e8ec', '#ffad70', '#ff4fa4', '#91e447', '#8fd8f5'];
@@ -46,14 +47,14 @@ export function ColorPalette({
   y,
   onChange,
 }: {
-  kind: 'pin' | 'paper';
+  kind: 'pin' | 'paper' | 'card';
   value: string;
   x: number;
   y: number;
   onChange: (color: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const colors = kind === 'pin' ? PIN_COLORS : PAPER_COLORS;
+  const colors = kind === 'pin' ? PIN_COLORS : kind === 'card' ? CARD_COLORS : PAPER_COLORS;
   const colorsRef = useRef(colors);
   colorsRef.current = colors;
   const stateRef = useRef<ReturnType<typeof CreateTrayViewer> | null>(null);
@@ -101,7 +102,7 @@ export function ColorPalette({
       <div
         className="metal-palette"
         role="group"
-        aria-label={kind === 'pin' ? 'Pin colors' : 'Paper colors'}
+        aria-label={kind === 'pin' ? 'Pin colors' : kind === 'card' ? 'Card colors' : 'Paper colors'}
         style={{ left: x, top: y } as CSSProperties}
         onPointerMove={handlePointerMove}
       >
@@ -114,7 +115,7 @@ export function ColorPalette({
             <button
               key={color}
               className={`swatch ${value === color ? 'active' : ''}`}
-                            aria-label={`${kind === 'pin' ? 'Pin' : 'Paper'} color ${index + 1}`}
+                            aria-label={`${kind === 'pin' ? 'Pin' : kind === 'card' ? 'Card' : 'Paper'} color ${index + 1}`}
               onClick={() => onChange(color)}
             />
           ),
